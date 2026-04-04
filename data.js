@@ -128,44 +128,46 @@ const DB = {
 
   // --- SEED DEMO DATA ---
   async seed() {
-    if (_cache.clients.length > 0) return;
-
-    _cache.clients = [
-      {
-        id: 1001,
-        nom: "Martin",
-        prenom: "Laure",
-        email: "laure.martin@email.fr",
-        tel: "06 12 34 56 78",
-        dateNaissance: "1994-07-15",
-        allergies: "Latex",
-        notes: "Cliente régulière • Style manga et floral • 3ème séance prévue",
-        createdAt: "2024-01-10T10:00:00Z",
-      },
-      {
-        id: 1002,
-        nom: "Dupont",
-        prenom: "Marc",
-        email: "marc.dupont@email.fr",
-        tel: "07 98 76 54 32",
-        dateNaissance: "1989-03-22",
-        allergies: "",
-        notes: "Passionné de géométrie sacrée • Design minimaliste épuré",
-        createdAt: "2024-02-14T14:00:00Z",
-      },
-      {
-        id: 1003,
-        nom: "Leclerc",
-        prenom: "Sophie",
-        email: "sophie.leclerc@email.fr",
-        tel: "06 55 44 33 22",
-        dateNaissance: "1998-11-05",
-        allergies: "Nickel",
-        notes:
-          "Première visite • Souhait : rose réaliste • Consultation effectuée",
-        createdAt: "2024-03-01T09:00:00Z",
-      },
-    ];
+    // Ne charger clients/rdvs que si vides, MAIS stocks se chargent TOUJOURS
+    if (_cache.clients.length === 0) {
+      _cache.clients = [
+        {
+          id: 1001,
+          nom: "Martin",
+          prenom: "Laure",
+          email: "laure.martin@email.fr",
+          tel: "06 12 34 56 78",
+          dateNaissance: "1994-07-15",
+          allergies: "Latex",
+          notes:
+            "Cliente régulière • Style manga et floral • 3ème séance prévue",
+          createdAt: "2024-01-10T10:00:00Z",
+        },
+        {
+          id: 1002,
+          nom: "Dupont",
+          prenom: "Marc",
+          email: "marc.dupont@email.fr",
+          tel: "07 98 76 54 32",
+          dateNaissance: "1989-03-22",
+          allergies: "",
+          notes: "Passionné de géométrie sacrée • Design minimaliste épuré",
+          createdAt: "2024-02-14T14:00:00Z",
+        },
+        {
+          id: 1003,
+          nom: "Leclerc",
+          prenom: "Sophie",
+          email: "sophie.leclerc@email.fr",
+          tel: "06 55 44 33 22",
+          dateNaissance: "1998-11-05",
+          allergies: "Nickel",
+          notes:
+            "Première visite • Souhait : rose réaliste • Consultation effectuée",
+          createdAt: "2024-03-01T09:00:00Z",
+        },
+      ];
+    }
 
     const today = new Date().toISOString().split("T")[0];
     const tomorrow = new Date(Date.now() + 86400000)
@@ -215,6 +217,22 @@ const DB = {
         unite: "flacons",
         seuil: 5,
         prix: 12.5,
+        batches: [
+          {
+            number: "LOT-2024-1001",
+            quantity: 5,
+            expiryDate: "2026-08-15",
+            dateAdded: "2024-06-10T10:00:00Z",
+            lastUpdated: "2024-06-10T10:00:00Z",
+          },
+          {
+            number: "LOT-2025-0042",
+            quantity: 3,
+            expiryDate: "2027-03-20",
+            dateAdded: "2025-01-15T14:30:00Z",
+            lastUpdated: "2025-01-15T14:30:00Z",
+          },
+        ],
       },
       {
         id: 3002,
@@ -224,6 +242,15 @@ const DB = {
         unite: "flacons",
         seuil: 4,
         prix: 14,
+        batches: [
+          {
+            number: "BATCH-RED-0156",
+            quantity: 3,
+            expiryDate: "2025-12-10",
+            dateAdded: "2024-08-22T09:15:00Z",
+            lastUpdated: "2024-08-22T09:15:00Z",
+          },
+        ],
       },
       {
         id: 3003,
@@ -242,6 +269,22 @@ const DB = {
         unite: "pièces",
         seuil: 50,
         prix: 0.8,
+        batches: [
+          {
+            number: "SN-RL12-4521",
+            quantity: 80,
+            expiryDate: "2026-06-30",
+            dateAdded: "2024-07-01T08:00:00Z",
+            lastUpdated: "2024-07-01T08:00:00Z",
+          },
+          {
+            number: "SN-RL12-4589",
+            quantity: 70,
+            expiryDate: "2026-11-15",
+            dateAdded: "2024-11-05T11:20:00Z",
+            lastUpdated: "2024-11-05T11:20:00Z",
+          },
+        ],
       },
       {
         id: 3005,
@@ -251,6 +294,15 @@ const DB = {
         unite: "pièces",
         seuil: 30,
         prix: 1.2,
+        batches: [
+          {
+            number: "SN-MAG-8801",
+            quantity: 40,
+            expiryDate: "2026-05-20",
+            dateAdded: "2024-09-10T13:45:00Z",
+            lastUpdated: "2024-09-10T13:45:00Z",
+          },
+        ],
       },
       {
         id: 3006,

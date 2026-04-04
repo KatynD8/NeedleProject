@@ -12,6 +12,25 @@ function renderDashboard() {
   );
   const alertsStock = stocks.filter((s) => s.quantite <= s.seuil);
 
+  // Lots expirés
+  const expiredBatches = [];
+  const expiringBatches = [];
+  stocks.forEach((stock) => {
+    if (!stock.batches) return;
+    stock.batches.forEach((batch) => {
+      if (batch.expiryDate) {
+        const daysLeft = Math.ceil(
+          (new Date(batch.expiryDate) - new Date()) / (1000 * 60 * 60 * 24),
+        );
+        if (daysLeft < 0) {
+          expiredBatches.push({ ...batch, stockName: stock.nom });
+        } else if (daysLeft < 30) {
+          expiringBatches.push({ ...batch, stockName: stock.nom, daysLeft });
+        }
+      }
+    });
+  });
+
   // Next 5 upcoming rdv
   const prochains = [...rdvs]
     .filter((r) => r.date >= today && r.statut !== "annule")
@@ -48,6 +67,20 @@ function renderDashboard() {
         <div class="stat-sub">stocks faibles</div>
       </div>
     </div>
+    
+    ${
+      expiredBatches.length > 0 || expiringBatches.length > 0
+        ? `
+      <div style="background:#ffe8e8;border:1px solid #ffcccc;border-radius:var(--radius-lg);padding:14px;margin-bottom:20px">
+        <div style="font-weight:600;color:#d32f2f;font-size:13px;margin-bottom:6px">⚠️ ALERTES LOTS</div>
+        <div style="font-size:12px;color:#c62828">
+          ${expiredBatches.length > 0 ? "🚨 " + expiredBatches.length + " lot(s) EXPIRÉ(S) | " : ""}
+          ${expiringBatches.length > 0 ? "⏰ " + expiringBatches.length + " lot(s) EXPIRE(NT) BIENTÔT" : ""}
+        </div>
+      </div>
+    `
+        : ""
+    }
 
     <div class="grid-2">
       <!-- Prochains RDV -->
