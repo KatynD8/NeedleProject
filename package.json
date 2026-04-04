@@ -1,0 +1,64 @@
+{
+  "name": "cartouche",
+  "version": "1.0.0",
+  "description": "Cartouche — L'atelier du tatoueur",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "rd /s /q dist 2>nul | electron-builder --win nsis",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KatynD8/Cartouche.git"
+  },
+  "keywords": ["tatouage", "studio", "gestion", "tracabilite"],
+  "author": "KatynD8",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/KatynD8/Cartouche/issues"
+  },
+  "homepage": "https://github.com/KatynD8/Cartouche#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^41.1.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.cartouche.studio",
+    "productName": "Cartouche",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "style.css",
+      "main.js",
+      "preload.js",
+      "data.js",
+      "app.js",
+      "dashboard.js",
+      "clients.js",
+      "agenda.js",
+      "stocks.js",
+      "contrats.js",
+      "finances.js"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Cartouche-Setup-${version}.exe"
+    }
+  }
+}
