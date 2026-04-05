@@ -765,13 +765,15 @@ tbody td {
 }
 
 .agenda-day {
-  min-height: 78px;
+  height: 90px; /* hauteur fixe */
+  overflow: hidden; /* coupe tout débordement */
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 6px;
   cursor: pointer;
   transition: all var(--transition);
+  position: relative;
 }
 
 .agenda-day:hover {
@@ -799,6 +801,7 @@ tbody td {
 }
 
 .rdv-chip {
+  display: block;
   font-size: 8px;
   padding: 2px 4px;
   border-radius: 3px;

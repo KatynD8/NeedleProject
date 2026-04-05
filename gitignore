@@ -1,2 +1,30 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+out/
+
+# Electron builder cache
+.electron-builder-cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data (ne pas versionner les données utilisateur)
+data/
+*.json
+!package.json
+!package-lock.json
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
