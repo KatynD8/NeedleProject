@@ -2,10 +2,11 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
-// Données dans AppData\Roaming\Cartouche
+// Données dans AppData\Roaming\InkMaster — stable, jamais effacé
 const DATA_DIR = path.join(app.getPath("userData"), "data");
-const DATA_PATH = path.join(DATA_DIR, "cartouche-data.json");
+const DATA_PATH = path.join(DATA_DIR, "inkmaster-data.json");
 
+// Créer le dossier si inexistant
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -16,7 +17,7 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    title: "Cartouche Studio",
+    title: "Plan'ink Studio",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -33,7 +34,7 @@ ipcMain.handle("load-data", () => {
     if (!fs.existsSync(DATA_PATH)) return {};
     return JSON.parse(fs.readFileSync(DATA_PATH, "utf-8"));
   } catch (e) {
-    console.error("[Cartouche] Erreur lecture:", e);
+    console.error("Erreur lecture:", e);
     return {};
   }
 });
@@ -43,7 +44,7 @@ ipcMain.handle("save-data", (_, data) => {
     fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf-8");
     return true;
   } catch (e) {
-    console.error("[Cartouche] Erreur écriture:", e);
+    console.error("Erreur écriture:", e);
     return false;
   }
 });
@@ -54,8 +55,4 @@ app.whenReady().then(createWindow);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });

@@ -1,33 +1,32 @@
 {
-  "name": "cartouche",
+  "name": "needleproject",
   "version": "1.0.0",
-  "description": "Cartouche — L'atelier du tatoueur",
+  "description": "Plan'ink — Studio Management App",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "rd /s /q dist 2>nul | electron-builder --win nsis",
+    "build": "electron-builder --win nsis",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KatynD8/Cartouche.git"
+    "url": "git+https://github.com/KatynD8/NeedleProject.git"
   },
-  "keywords": ["tatouage", "studio", "gestion", "tracabilite"],
+  "keywords": [],
   "author": "KatynD8",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/KatynD8/Cartouche/issues"
+    "url": "https://github.com/KatynD8/NeedleProject/issues"
   },
-  "homepage": "https://github.com/KatynD8/Cartouche#readme",
-  "dependencies": {},
+  "homepage": "https://github.com/KatynD8/NeedleProject#readme",
   "devDependencies": {
-    "electron": "^41.1.0",
+    "electron": "^41.1.1",
     "electron-builder": "^25.0.0"
   },
   "build": {
-    "appId": "com.cartouche.studio",
-    "productName": "Cartouche",
+    "appId": "com.katyn.planink",
+    "productName": "Plan'ink",
     "directories": {
       "output": "dist"
     },
@@ -49,7 +48,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -58,7 +59,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "Cartouche-Setup-${version}.exe"
+      "artifactName": "Planink-Setup-${version}.exe"
     }
   }
 }

@@ -437,12 +437,8 @@ async function saveEditFinance(id) {
 }
 
 async function deleteFinance(id) {
-  confirmModal(
-    "Supprimer cette entrée financière ? Cette action est irréversible.",
-    async () => {
-      await DB.deleteFinance(id);
-      renderFinances();
-      toast("Entrée supprimée", "info");
-    },
-  );
+  if (!confirm("Supprimer cette entrée ?")) return;
+  await DB.deleteFinance(id);
+  renderFinances();
+  toast("Entrée supprimée", "info");
 }

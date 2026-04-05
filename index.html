@@ -3,81 +3,65 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InkMaster — Studio Management</title>
+    <title>Plan'ink — Studio Management v1.0</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div id="app">
-      <!-- Sidebar -->
       <aside class="sidebar">
         <div class="logo">
-          <span class="logo-icon">⬡</span>
+          <div class="logo-icon">⬡</div>
           <div>
             <div class="logo-title">PLAN'INK</div>
-            <div class="logo-sub">Studio Manager</div>
+            <div class="logo-sub">STUDIO · v1.0</div>
           </div>
         </div>
-
         <nav class="nav">
           <button class="nav-item active" data-page="dashboard">
-            <span class="nav-icon">📊</span>
-            <span>Tableau de Bord</span>
+            <span class="nav-icon">◈</span><span>Dashboard</span>
           </button>
           <button class="nav-item" data-page="clients">
-            <span class="nav-icon">👥</span>
-            <span>Clients</span>
+            <span class="nav-icon">◉</span><span>Clients</span>
           </button>
           <button class="nav-item" data-page="agenda">
-            <span class="nav-icon">📅</span>
-            <span>Agenda</span>
+            <span class="nav-icon">◷</span><span>Agenda</span>
           </button>
           <button class="nav-item" data-page="stocks">
-            <span class="nav-icon">📦</span>
-            <span>Stocks</span>
+            <span class="nav-icon">◫</span><span>Stocks & Lots</span>
           </button>
           <button class="nav-item" data-page="contrats">
-            <span class="nav-icon">📄</span>
-            <span>Contrats</span>
+            <span class="nav-icon">◪</span><span>Contrats</span>
+          </button>
+          <button class="nav-item" data-page="finances">
+            <span class="nav-icon">◬</span><span>Finances</span>
           </button>
         </nav>
-
         <div class="sidebar-footer">
           <div class="artist-card">
-            <div class="artist-avatar">TK</div>
+            <div class="artist-avatar" id="sidebar-avatar">TK</div>
             <div>
-              <div class="artist-name">The Artist</div>
+              <div class="artist-name" id="sidebar-name">The Artist</div>
               <div class="artist-status">● En ligne</div>
             </div>
           </div>
         </div>
       </aside>
 
-      <!-- Main Content -->
       <main class="main">
-        <div id="page-dashboard" class="page active">
-          <!-- injected by JS -->
-        </div>
-        <div id="page-clients" class="page">
-          <!-- injected by JS -->
-        </div>
-        <div id="page-agenda" class="page">
-          <!-- injected by JS -->
-        </div>
-        <div id="page-stocks" class="page">
-          <!-- injected by JS -->
-        </div>
-        <div id="page-contrats" class="page">
-          <!-- injected by JS -->
-        </div>
+        <div id="page-dashboard" class="page active"></div>
+        <div id="page-clients" class="page"></div>
+        <div id="page-agenda" class="page"></div>
+        <div id="page-stocks" class="page"></div>
+        <div id="page-contrats" class="page"></div>
+        <div id="page-finances" class="page"></div>
       </main>
     </div>
 
-    <!-- Modal container -->
     <div id="modal-overlay" class="modal-overlay hidden">
       <div id="modal-box" class="modal-box">
         <button class="modal-close" onclick="closeModal()">✕</button>
@@ -85,13 +69,15 @@
       </div>
     </div>
 
+    <div id="toast-container"></div>
+
     <script src="data.js"></script>
     <script src="app.js"></script>
-    <script src="batches.js"></script>
     <script src="dashboard.js"></script>
     <script src="clients.js"></script>
     <script src="agenda.js"></script>
     <script src="stocks.js"></script>
     <script src="contrats.js"></script>
+    <script src="finances.js"></script>
   </body>
 </html>

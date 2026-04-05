@@ -1,4 +1,4 @@
-// === APP ROUTER ===
+// === APP.JS — Router & Helpers v1.0 ===
 
 function navigate(page) {
   document
@@ -29,12 +29,19 @@ function renderPage(page) {
     case "contrats":
       renderContrats();
       break;
+    case "finances":
+      renderFinances();
+      break;
   }
 }
 
-// --- MODAL ---
-function openModal(html) {
+// === MODAL ===
+let _modalStack = [];
+
+function openModal(html, wide = false) {
   document.getElementById("modal-content").innerHTML = html;
+  const box = document.getElementById("modal-box");
+  box.className = "modal-box" + (wide ? " modal-box-wide" : "");
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
@@ -49,30 +56,71 @@ document
     if (e.target === this) closeModal();
   });
 
-// --- NAV LISTENERS ---
+// === NAV ===
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => navigate(btn.dataset.page));
 });
 
-// --- HELPERS ---
+// === TOAST ===
+function toast(msg, type = "info", duration = 3000) {
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  const icon = type === "success" ? "✓" : type === "error" ? "✕" : "◈";
+  t.innerHTML = `<span style="color:${type === "success" ? "var(--green)" : type === "error" ? "var(--red)" : "var(--accent)"}">${icon}</span> ${msg}`;
+  document.getElementById("toast-container").appendChild(t);
+  setTimeout(() => {
+    t.style.animation = "toastOut 0.2s ease forwards";
+    setTimeout(() => t.remove(), 200);
+  }, duration);
+}
+
+// === HELPERS ===
 function formatDate(iso) {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", {
+  return new Date(
+    iso + (iso.length === 10 ? "T12:00:00" : ""),
+  ).toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
 }
 
-function formatDateShort(iso) {
+function formatDateLong(iso) {
+  if (!iso) return "—";
+  return new Date(
+    iso + (iso.length === 10 ? "T12:00:00" : ""),
+  ).toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+  return (
+    d.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }) +
+    " " +
+    d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+function formatMoney(n) {
+  return (n || 0).toFixed(2).replace(".", ",") + " €";
 }
 
 function initials(nom, prenom) {
-  return ((prenom || "")[0] || "") + ((nom || "")[0] || "");
+  return (
+    ((prenom || "")[0] || "").toUpperCase() +
+    ((nom || "")[0] || "").toUpperCase()
+  );
 }
 
 function clientName(clientId) {
@@ -87,81 +135,31 @@ function statutBadge(statut) {
     annule: '<span class="badge badge-red">ANNULÉ</span>',
     termine: '<span class="badge badge-blue">TERMINÉ</span>',
   };
-  return map[statut] || statut;
+  return map[statut] || `<span class="badge badge-gray">${statut}</span>`;
 }
 
-// NB : data.js appelle renderDashboard() lui-même une fois les données chargées.
-// Ce fichier n'a donc pas besoin de DOMContentLoaded ici.
-
-// --- EXPORT UTILITIES ---
-function exportToJSON() {
-  const data = {
-    version: "1.1",
-    exportDate: new Date().toISOString(),
-    clients: DB.getClients(),
-    rdvs: DB.getRdvs(),
-    stocks: DB.getStocks(),
-    contrats: DB.getContrats(),
-  };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `planink-backup-${new Date().toISOString().split("T")[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+function lotBadge(lotId) {
+  if (!lotId) return "";
+  const lot = DB.getLot(lotId);
+  if (!lot) return "";
+  return `<span class="lot-tag" onclick="openLotDetail(${lot.id})" title="Voir le lot">◉ ${lot.numeroLot}</span>`;
 }
 
-function exportClientsCSV() {
-  const clients = DB.getClients();
-  const headers = ["Nom", "Prénom", "Email", "Téléphone", "Allergies"];
-  const rows = clients.map((c) => [
-    c.nom,
-    c.prenom,
-    c.email,
-    c.tel,
-    c.allergies,
-  ]);
-  const csv = [headers, ...rows]
-    .map((r) => r.map((cell) => `"${cell || ""}"`).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `planink-clients-${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const diff = new Date(dateStr + "T12:00:00") - new Date();
+  return Math.ceil(diff / 86400000);
 }
 
-// --- STATS DASHBOARD ---
-function getStats() {
-  const clients = DB.getClients();
-  const rdvs = DB.getRdvs();
-  const stocks = DB.getStocks();
-  const contrats = DB.getContrats();
-
-  const today = new Date().toISOString().split("T")[0];
-  const rdvsToday = rdvs.filter((r) => r.date === today).length;
-  const rdvsThisMonth = rdvs.filter((r) => {
-    const d = new Date(r.date);
-    const now = new Date();
-    return (
-      d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    );
-  }).length;
-
-  const stockAlerts = stocks.filter((s) => s.quantite <= s.seuil).length;
-  const contratsSigned = contrats.filter((c) => c.signe).length;
-
-  return {
-    clientsTotal: clients.length,
-    rdvsToday,
-    rdvsThisMonth,
-    stockAlerts,
-    contratsSigned,
-    contratsTotal: contrats.length,
-    stockValue: stocks.reduce((sum, s) => sum + s.quantite * s.prix, 0),
-  };
+function updateSidebarArtist() {
+  const s = DB.getSettings();
+  if (s.artisteInitiales)
+    document.getElementById("sidebar-avatar").textContent = s.artisteInitiales;
+  if (s.artisteNom)
+    document.getElementById("sidebar-name").textContent = s.artisteNom;
 }
+
+// === KEYBOARD ===
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
