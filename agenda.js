@@ -2,18 +2,9 @@
 let agendaYear = new Date().getFullYear();
 let agendaMonth = new Date().getMonth();
 
-// CRUCIAL : toISO en heure locale, pas UTC
-function toISO(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const j = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${j}`;
-}
-
 function renderAgenda() {
   const rdvs = DB.getRdvs();
   const today = new Date();
-  const todayStr = toISO(today);
   const monthNames = [
     "Janvier",
     "Février",
@@ -50,6 +41,14 @@ function renderAgenda() {
     });
   }
 
+  function toISO(d) {
+    return d.toISOString().split("T")[0];
+  }
+  function isToday(d) {
+    return toISO(d) === toISO(today);
+  }
+
+  const todayStr = toISO(today);
   const upcoming = rdvs
     .filter((r) => r.date >= todayStr && r.statut !== "annule")
     .sort(
@@ -57,53 +56,45 @@ function renderAgenda() {
     )
     .slice(0, 8);
 
-  const monthRdvs = rdvs.filter((r) => {
-    const d = new Date(r.date + "T12:00:00");
-    return d.getFullYear() === agendaYear && d.getMonth() === agendaMonth;
-  });
-  const monthCA = monthRdvs
-    .filter((r) => r.statut === "termine")
-    .reduce((s, r) => s + (r.tarif || 0), 0);
-
   document.getElementById("page-agenda").innerHTML = `
     <div class="page-header">
       <div>
         <div class="page-title">AGENDA</div>
-        <div class="page-subtitle">${monthNames[agendaMonth].toUpperCase()} ${agendaYear} · ${monthRdvs.length} RDV · ${formatMoney(monthCA)} facturé</div>
+        <div class="page-subtitle">${monthNames[agendaMonth].toUpperCase()} ${agendaYear}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-ghost" onclick="prevMonth()">◂ PRÉC.</button>
-        <button class="btn btn-ghost" onclick="goToday()">AUJOURD'HUI</button>
-        <button class="btn btn-ghost" onclick="nextMonth()">SUIV. ▸</button>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn btn-ghost" onclick="agendaMonth--;if(agendaMonth<0){agendaMonth=11;agendaYear--;}renderAgenda()">◂ PRÉC.</button>
+        <button class="btn btn-ghost" onclick="agendaMonth=new Date().getMonth();agendaYear=new Date().getFullYear();renderAgenda()">AUJOURD'HUI</button>
+        <button class="btn btn-ghost" onclick="agendaMonth++;if(agendaMonth>11){agendaMonth=0;agendaYear++;}renderAgenda()">SUIV. ▸</button>
         <button class="btn btn-primary" onclick="openAddRdv()">+ NOUVEAU RDV</button>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 270px;gap:18px">
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:20px">
       <div>
-        <div class="agenda-grid" style="margin-bottom:3px">
+        <div class="agenda-grid" style="margin-bottom:4px">
           ${dayNames.map((d) => `<div class="agenda-day-header">${d}</div>`).join("")}
         </div>
         <div class="agenda-grid">
           ${days
             .map(({ date, current }) => {
               const iso = toISO(date);
-              const isToday = iso === todayStr;
               const dayRdvs = rdvs.filter((r) => r.date === iso);
               return `
-              <div class="agenda-day ${isToday ? "today" : ""} ${!current ? "other-month" : ""}"
+              <div class="agenda-day ${isToday(date) ? "today" : ""} ${!current ? "other-month" : ""}"
                    onclick="openDayDetail('${iso}')">
                 <div class="agenda-day-num">${date.getDate()}</div>
                 ${dayRdvs
                   .slice(0, 3)
                   .map(
                     (r) => `
-                  <div class="rdv-chip" title="${r.titre} — ${clientName(r.clientId)}">${r.heure} ${r.titre}</div>
+                  <div class="rdv-chip chip-${r.statut}" title="${r.titre} — ${r.statut}">${r.heure} ${r.titre}</div>
                 `,
                   )
                   .join("")}
-                ${dayRdvs.length > 3 ? `<div style="font-size:8px;color:var(--ink-muted);font-family:var(--font-mono)">+${dayRdvs.length - 3}</div>` : ""}
-              </div>`;
+                ${dayRdvs.length > 3 ? `<div style="font-size:9px;color:var(--ink-muted);font-family:var(--font-mono)">+${dayRdvs.length - 3} autres</div>` : ""}
+              </div>
+            `;
             })
             .join("")}
         </div>
@@ -111,28 +102,27 @@ function renderAgenda() {
 
       <div>
         <div class="section-title">Prochains RDV</div>
-        <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;flex-direction:column;gap:8px">
           ${
             upcoming.length === 0
               ? `<div class="empty-state"><div class="empty-icon">◷</div><div class="empty-text">AUCUN RDV</div></div>`
               : upcoming
                   .map(
                     (r) => `
-              <div class="card" style="padding:11px;cursor:pointer" onclick="openRdvDetail(${r.id})">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">${r.titre}</div>
-                    <div style="font-size:10px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
-                    <div style="font-size:10px;color:var(--accent);font-family:var(--font-mono);margin-top:3px">${formatDate(r.date)} · ${r.heure}</div>
-                    ${r.tarif ? `<div style="font-size:10px;color:var(--ink-muted)">${formatMoney(r.tarif)}</div>` : ""}
-                  </div>
-                  <div style="text-align:right;flex-shrink:0;margin-left:8px">
-                    <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted)">${r.duree}min</div>
-                    <div style="margin-top:4px">${statutBadge(r.statut)}</div>
-                  </div>
+            <div class="card" style="padding:12px;cursor:pointer" onclick="openRdvDetail(${r.id})">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-size:12px;font-weight:500;margin-bottom:4px">${r.titre}</div>
+                  <div style="font-size:11px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
+                  <div style="font-size:11px;color:var(--accent);font-family:var(--font-mono);margin-top:4px">${formatDate(r.date)} · ${r.heure}</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-muted)">${r.duree}min</div>
+                  <div style="margin-top:4px">${statutBadge(r.statut)}</div>
                 </div>
               </div>
-            `,
+            </div>
+          `,
                   )
                   .join("")
           }
@@ -142,28 +132,6 @@ function renderAgenda() {
   `;
 }
 
-function prevMonth() {
-  agendaMonth--;
-  if (agendaMonth < 0) {
-    agendaMonth = 11;
-    agendaYear--;
-  }
-  renderAgenda();
-}
-function nextMonth() {
-  agendaMonth++;
-  if (agendaMonth > 11) {
-    agendaMonth = 0;
-    agendaYear++;
-  }
-  renderAgenda();
-}
-function goToday() {
-  agendaMonth = new Date().getMonth();
-  agendaYear = new Date().getFullYear();
-  renderAgenda();
-}
-
 function openAddRdvForClient(clientId) {
   navigate("agenda");
   setTimeout(() => openAddRdv(clientId), 100);
@@ -171,41 +139,23 @@ function openAddRdvForClient(clientId) {
 
 function openAddRdv(presetClientId) {
   const clients = DB.getClients();
-  const lots = DB.getActiveLots();
-  const lotOptions = (cat) =>
-    lots
-      .filter((l) => l.categorie === cat)
-      .map(
-        (l) => `
-    <option value="${l.id}">${l.nom} — lot ${l.numeroLot} (${l.quantiteRestante} ${l.unite})</option>
-  `,
-      )
-      .join("");
-
-  openModal(
-    `
+  openModal(`
     <div class="modal-title">NOUVEAU RENDEZ-VOUS</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Client *</label>
-        <select class="form-select" id="rdv-client">
-          <option value="">Sélectionner...</option>
-          ${clients.map((c) => `<option value="${c.id}" ${c.id == presetClientId ? "selected" : ""}>${c.prenom} ${c.nom}${c.allergies ? " ⚠" : ""}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Tarif (€)</label>
-        <input class="form-input" id="rdv-tarif" type="number" step="10" value="0" min="0">
-      </div>
+    <div class="form-group">
+      <label class="form-label">Client</label>
+      <select class="form-select" id="rdv-client">
+        <option value="">Sélectionner...</option>
+        ${clients.map((c) => `<option value="${c.id}" ${c.id == presetClientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
+      </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Titre / Description *</label>
+      <label class="form-label">Titre / Description</label>
       <input class="form-input" id="rdv-titre" placeholder="Dragon avant-bras, Rose géométrique...">
     </div>
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" id="rdv-date" type="date" value="${toISO(new Date())}">
+        <input class="form-input" id="rdv-date" type="date" value="${new Date().toISOString().split("T")[0]}">
       </div>
       <div class="form-group">
         <label class="form-label">Heure</label>
@@ -225,28 +175,6 @@ function openAddRdv(presetClientId) {
         </select>
       </div>
     </div>
-
-    <div class="section-title" style="margin-top:4px">Traçabilité (optionnel)</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">🪡 Lot aiguilles utilisé</label>
-        <select class="form-select" id="rdv-lot-aiguille">
-          <option value="">— Aucun sélectionné</option>
-          ${lotOptions("Aiguilles")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">🎨 Lot(s) encres utilisé(s)</label>
-        <select class="form-select" id="rdv-lot-encre" multiple style="height:70px">
-          ${lotOptions("Encres")}
-        </select>
-      </div>
-    </div>
-    <div class="info-box" style="margin-bottom:12px">
-      <span class="info-box-icon">◈</span>
-      <span>Sélectionner les lots permet de tracer quels matériaux ont été utilisés pour chaque client. Maintenir Ctrl/Cmd pour sélection multiple d'encres.</span>
-    </div>
-
     <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea class="form-textarea" id="rdv-notes" placeholder="Références, détails..."></textarea>
@@ -255,25 +183,16 @@ function openAddRdv(presetClientId) {
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-primary" onclick="saveNewRdv()">ENREGISTRER</button>
     </div>
-  `,
-    true,
-  );
+  `);
 }
 
 async function saveNewRdv() {
   const clientId = parseInt(document.getElementById("rdv-client").value);
   const titre = document.getElementById("rdv-titre").value.trim();
   if (!clientId || !titre) {
-    toast("Client et titre obligatoires", "error");
+    alert("Client et titre obligatoires.");
     return;
   }
-
-  const selEncres = Array.from(
-    document.getElementById("rdv-lot-encre").selectedOptions,
-  ).map((o) => parseInt(o.value));
-  const lotAig =
-    parseInt(document.getElementById("rdv-lot-aiguille").value) || null;
-
   await DB.addRdv({
     clientId,
     titre,
@@ -281,31 +200,22 @@ async function saveNewRdv() {
     heure: document.getElementById("rdv-heure").value,
     duree: parseInt(document.getElementById("rdv-duree").value),
     statut: document.getElementById("rdv-statut").value,
-    tarif: parseFloat(document.getElementById("rdv-tarif").value) || 0,
     notes: document.getElementById("rdv-notes").value.trim(),
-    lotAiguille: lotAig,
-    lotEncre: selEncres.length > 0 ? selEncres : [],
   });
-
   closeModal();
   renderAgenda();
   renderDashboard();
-  toast("RDV ajouté", "success");
 }
 
 function openDayDetail(iso) {
   const rdvs = DB.getRdvs()
     .filter((r) => r.date === iso)
     .sort((a, b) => a.heure.localeCompare(b.heure));
-  // Construire le label sans passer par new Date(iso) pour éviter le décalage UTC
-  const [y, m, d] = iso.split("-").map(Number);
-  const dateLocale = new Date(y, m - 1, d);
-  const label = dateLocale.toLocaleDateString("fr-FR", {
+  const label = new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
-
   openModal(`
     <div class="modal-title">${label.toUpperCase()}</div>
     ${
@@ -315,38 +225,30 @@ function openDayDetail(iso) {
         <div class="empty-icon">◷</div>
         <div class="empty-text">AUCUN RDV CE JOUR</div>
       </div>
-      <div style="text-align:center;margin-top:14px">
+      <div style="text-align:center;margin-top:16px">
         <button class="btn btn-primary" onclick="closeModal();openAddRdv()">+ AJOUTER UN RDV</button>
       </div>
     `
         : rdvs
             .map(
               (r) => `
-      <div style="padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px">
+      <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
-            <div style="font-weight:500;font-size:13px;margin-bottom:3px">${r.titre}</div>
-            <div style="font-size:11px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
-            <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:3px">${r.heure} · ${r.duree}min${r.tarif ? " · " + formatMoney(r.tarif) : ""}</div>
-            ${
-              r.lotAiguille || (r.lotEncre && r.lotEncre.length > 0)
-                ? `
-              <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap">
-                ${r.lotAiguille ? `<span style="font-size:10px;color:var(--ink-muted)">🪡</span> ${lotBadge(r.lotAiguille)}` : ""}
-                ${(r.lotEncre || []).map((id) => `<span style="font-size:10px;color:var(--ink-muted)">🎨</span> ${lotBadge(id)}`).join("")}
-              </div>`
-                : ""
-            }
+            <div style="font-weight:500;font-size:14px;margin-bottom:4px">${r.titre}</div>
+            <div style="font-size:12px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:4px">${r.heure} · ${r.duree}min</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
             ${statutBadge(r.statut)}
-            <div style="display:flex;gap:5px">
+            <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRdvFromDay(${r.id},'${iso}')">✕</button>
+              <button class="btn btn-primary btn-sm" onclick="closeModal();genererContratDepuisRdv(${r.id})">📄</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
             </div>
           </div>
         </div>
-        ${r.notes ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-muted);font-style:italic;border-top:1px solid var(--border);padding-top:6px">${r.notes}</div>` : ""}
+        ${r.notes ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-muted);font-style:italic">${r.notes}</div>` : ""}
       </div>
     `,
             )
@@ -358,12 +260,12 @@ function openDayDetail(iso) {
   `);
 }
 
-async function deleteRdvFromDay(id, iso) {
-  if (!confirm("Supprimer ce RDV ?")) return;
-  await DB.deleteRdv(id);
-  closeModal();
-  renderAgenda();
-  toast("RDV supprimé", "info");
+async function deleteRdv(id, iso) {
+  if (confirm("Supprimer ce RDV ?")) {
+    await DB.deleteRdv(id);
+    closeModal();
+    renderAgenda();
+  }
 }
 
 function openRdvDetail(id) {
@@ -376,22 +278,13 @@ function openEditRdv(id) {
   const r = DB.getRdvs().find((x) => x.id === id);
   if (!r) return;
   const clients = DB.getClients();
-  const lots = DB.getLots();
-
-  openModal(
-    `
+  openModal(`
     <div class="modal-title">MODIFIER RDV</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Client</label>
-        <select class="form-select" id="erdv-client">
-          ${clients.map((c) => `<option value="${c.id}" ${c.id === r.clientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Tarif (€)</label>
-        <input class="form-input" id="erdv-tarif" type="number" step="10" value="${r.tarif || 0}">
-      </div>
+    <div class="form-group">
+      <label class="form-label">Client</label>
+      <select class="form-select" id="erdv-client">
+        ${clients.map((c) => `<option value="${c.id}" ${c.id === r.clientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
+      </select>
     </div>
     <div class="form-group">
       <label class="form-label">Titre</label>
@@ -422,36 +315,6 @@ function openEditRdv(id) {
         </select>
       </div>
     </div>
-    <div class="section-title" style="margin-top:4px">Traçabilité lots</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Lot aiguilles</label>
-        <select class="form-select" id="erdv-lot-aiguille">
-          <option value="">— Aucun</option>
-          ${lots
-            .filter((l) => l.categorie === "Aiguilles")
-            .map(
-              (l) => `
-            <option value="${l.id}" ${r.lotAiguille === l.id ? "selected" : ""}>${l.nom} — ${l.numeroLot}</option>
-          `,
-            )
-            .join("")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Lots encres</label>
-        <select class="form-select" id="erdv-lot-encre" multiple style="height:70px">
-          ${lots
-            .filter((l) => l.categorie === "Encres")
-            .map(
-              (l) => `
-            <option value="${l.id}" ${(r.lotEncre || []).includes(l.id) ? "selected" : ""}>${l.nom} — ${l.numeroLot}</option>
-          `,
-            )
-            .join("")}
-        </select>
-      </div>
-    </div>
     <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea class="form-textarea" id="erdv-notes">${r.notes || ""}</textarea>
@@ -460,17 +323,10 @@ function openEditRdv(id) {
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-primary" onclick="saveEditRdv(${id})">SAUVEGARDER</button>
     </div>
-  `,
-    true,
-  );
+  `);
 }
 
 async function saveEditRdv(id) {
-  const selEncres = Array.from(
-    document.getElementById("erdv-lot-encre").selectedOptions,
-  ).map((o) => parseInt(o.value));
-  const lotAig =
-    parseInt(document.getElementById("erdv-lot-aiguille").value) || null;
   await DB.updateRdv(id, {
     clientId: parseInt(document.getElementById("erdv-client").value),
     titre: document.getElementById("erdv-titre").value.trim(),
@@ -478,12 +334,111 @@ async function saveEditRdv(id) {
     heure: document.getElementById("erdv-heure").value,
     duree: parseInt(document.getElementById("erdv-duree").value),
     statut: document.getElementById("erdv-statut").value,
-    tarif: parseFloat(document.getElementById("erdv-tarif").value) || 0,
     notes: document.getElementById("erdv-notes").value.trim(),
-    lotAiguille: lotAig,
-    lotEncre: selEncres.length > 0 ? selEncres : [],
   });
   closeModal();
   renderAgenda();
-  toast("RDV mis à jour", "success");
+}
+
+// === EXTENSIONS : Contrat depuis RDV + Revenu automatique ===
+
+// Remplace saveEditRdv pour détecter le passage en "terminé"
+// (on écrase la version précédente via redéclaration — la dernière définition JS gagne)
+async function saveEditRdv(id) {
+  const rdvBefore = DB.getRdvs().find((x) => x.id === id);
+  const nouveauStatut = document.getElementById("erdv-statut").value;
+  const etaitDejaTermine = rdvBefore && rdvBefore.statut === "termine";
+
+  await DB.updateRdv(id, {
+    clientId: parseInt(document.getElementById("erdv-client").value),
+    titre: document.getElementById("erdv-titre").value.trim(),
+    date: document.getElementById("erdv-date").value,
+    heure: document.getElementById("erdv-heure").value,
+    duree: parseInt(document.getElementById("erdv-duree").value),
+    statut: nouveauStatut,
+    notes: document.getElementById("erdv-notes").value.trim(),
+  });
+  closeModal();
+
+  if (nouveauStatut === "termine" && !etaitDejaTermine) {
+    const rdv = DB.getRdvs().find((x) => x.id === id);
+    setTimeout(() => openRevenuePrompt(rdv), 150);
+  } else {
+    renderAgenda();
+  }
+}
+
+function openRevenuePrompt(rdv) {
+  const client = clientName(rdv.clientId);
+  openModal(`
+    <div class="modal-title">SÉANCE TERMINÉE ✓</div>
+    <div style="text-align:center;padding:12px 0 20px">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:2px">RDV MARQUÉ COMME TERMINÉ</div>
+      <div style="margin-top:6px;font-size:13px;color:var(--ink-muted)">${rdv.titre} — ${client}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Montant encaissé (€)</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input class="form-input" id="rev-montant" type="number" step="0.01" min="0" placeholder="250.00" style="font-size:18px;text-align:center;flex:1">
+        <span style="font-family:var(--font-display);font-size:24px;color:var(--accent)">€</span>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Mode de paiement</label>
+        <select class="form-select" id="rev-mode">
+          <option>CB</option><option>Espèces</option><option>Virement</option>
+          <option>Chèque</option><option>Lydia</option><option>PayPal</option><option>Autre</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Durée · Date</label>
+        <div class="form-input" style="color:var(--ink-muted);cursor:default">${rdv.duree} min · ${formatDate(rdv.date)}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal();renderAgenda();renderDashboard()">IGNORER</button>
+      <button class="btn btn-primary" onclick="saveRevenue(${rdv.id})">💰 ENREGISTRER</button>
+    </div>
+  `);
+}
+
+async function saveRevenue(rdvId) {
+  const montant = parseFloat(document.getElementById("rev-montant").value) || 0;
+  if (montant > 0) {
+    const rdv = DB.getRdvs().find((x) => x.id === rdvId);
+    await DB.addFinance({
+      type: "recette",
+      montant,
+      description: rdv ? rdv.titre : "Séance",
+      categorie: "Séance",
+      date: rdv ? rdv.date : new Date().toISOString().split("T")[0],
+      clientId: rdv ? rdv.clientId : null,
+      modePaiement: document.getElementById("rev-mode")?.value || "CB",
+    });
+    toast(`${montant.toFixed(2)} € enregistré`, "success");
+  }
+  closeModal();
+  renderAgenda();
+  renderDashboard();
+}
+
+function genererContratDepuisRdv(rdvId) {
+  const rdv = DB.getRdvs().find((x) => x.id === rdvId);
+  if (!rdv) return;
+  const client = DB.getClient(rdv.clientId);
+  navigate("contrats");
+  setTimeout(() => {
+    openNewContratPreFilled({
+      clientId: rdv.clientId,
+      description: rdv.titre,
+      date: rdv.date,
+      allergies: client ? client.allergies || "" : "",
+    });
+  }, 100);
+}
+
+function openAddRdvForClient(clientId) {
+  navigate("agenda");
+  setTimeout(() => openAddRdv(clientId), 100);
 }

@@ -1,14 +1,17 @@
-// === APP.JS — Router & Helpers v1.0 ===
+// === APP ROUTER ===
 
 function navigate(page) {
+  const pageEl = document.getElementById("page-" + page);
+  const navEl = document.querySelector(`[data-page="${page}"]`);
+  if (!pageEl || !navEl) return;
   document
     .querySelectorAll(".page")
     .forEach((p) => p.classList.remove("active"));
   document
     .querySelectorAll(".nav-item")
     .forEach((n) => n.classList.remove("active"));
-  document.getElementById("page-" + page).classList.add("active");
-  document.querySelector(`[data-page="${page}"]`).classList.add("active");
+  pageEl.classList.add("active");
+  navEl.classList.add("active");
   renderPage(page);
 }
 
@@ -35,19 +38,19 @@ function renderPage(page) {
   }
 }
 
-// === MODAL ===
-let _modalStack = [];
-
+// --- MODAL ---
+// wide=true → modal plus large pour les fiches détail
 function openModal(html, wide = false) {
   document.getElementById("modal-content").innerHTML = html;
   const box = document.getElementById("modal-box");
-  box.className = "modal-box" + (wide ? " modal-box-wide" : "");
+  box.style.width = wide ? "720px" : "";
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
 function closeModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
   document.getElementById("modal-content").innerHTML = "";
+  document.getElementById("modal-box").style.width = "";
 }
 
 document
@@ -56,71 +59,30 @@ document
     if (e.target === this) closeModal();
   });
 
-// === NAV ===
+// --- NAV LISTENERS ---
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => navigate(btn.dataset.page));
 });
 
-// === TOAST ===
-function toast(msg, type = "info", duration = 3000) {
-  const t = document.createElement("div");
-  t.className = `toast ${type}`;
-  const icon = type === "success" ? "✓" : type === "error" ? "✕" : "◈";
-  t.innerHTML = `<span style="color:${type === "success" ? "var(--green)" : type === "error" ? "var(--red)" : "var(--accent)"}">${icon}</span> ${msg}`;
-  document.getElementById("toast-container").appendChild(t);
-  setTimeout(() => {
-    t.style.animation = "toastOut 0.2s ease forwards";
-    setTimeout(() => t.remove(), 200);
-  }, duration);
-}
-
-// === HELPERS ===
+// --- HELPERS ---
 function formatDate(iso) {
   if (!iso) return "—";
-  return new Date(
-    iso + (iso.length === 10 ? "T12:00:00" : ""),
-  ).toLocaleDateString("fr-FR", {
+  const d = new Date(iso);
+  return d.toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
 }
 
-function formatDateLong(iso) {
-  if (!iso) return "—";
-  return new Date(
-    iso + (iso.length === 10 ? "T12:00:00" : ""),
-  ).toLocaleDateString("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatDateTime(iso) {
+function formatDateShort(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return (
-    d.toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }) +
-    " " +
-    d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-  );
-}
-
-function formatMoney(n) {
-  return (n || 0).toFixed(2).replace(".", ",") + " €";
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 }
 
 function initials(nom, prenom) {
-  return (
-    ((prenom || "")[0] || "").toUpperCase() +
-    ((nom || "")[0] || "").toUpperCase()
-  );
+  return ((prenom || "")[0] || "") + ((nom || "")[0] || "");
 }
 
 function clientName(clientId) {
@@ -135,31 +97,45 @@ function statutBadge(statut) {
     annule: '<span class="badge badge-red">ANNULÉ</span>',
     termine: '<span class="badge badge-blue">TERMINÉ</span>',
   };
-  return map[statut] || `<span class="badge badge-gray">${statut}</span>`;
+  return map[statut] || `<span class="badge">${statut}</span>`;
 }
 
+// Affiche un badge pour un lot stock (aiguille/encre lié à un RDV)
 function lotBadge(lotId) {
   if (!lotId) return "";
-  const lot = DB.getLot(lotId);
-  if (!lot) return "";
-  return `<span class="lot-tag" onclick="openLotDetail(${lot.id})" title="Voir le lot">◉ ${lot.numeroLot}</span>`;
+  const s = DB.getStocks().find((x) => x.id === lotId);
+  if (!s) return "";
+  return `<span class="badge badge-gray" style="font-size:9px">${s.nom}</span>`;
 }
 
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const diff = new Date(dateStr + "T12:00:00") - new Date();
-  return Math.ceil(diff / 86400000);
+// --- FORMAT MONEY ---
+function formatMoney(val) {
+  return (
+    (val || 0).toLocaleString("fr-FR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " €"
+  );
 }
 
-function updateSidebarArtist() {
-  const s = DB.getSettings();
-  if (s.artisteInitiales)
-    document.getElementById("sidebar-avatar").textContent = s.artisteInitiales;
-  if (s.artisteNom)
-    document.getElementById("sidebar-name").textContent = s.artisteNom;
+// --- TOAST NOTIFICATIONS ---
+function toast(msg, type = "info") {
+  const colors = {
+    success: "var(--green)",
+    error: "var(--red)",
+    info: "var(--accent)",
+  };
+  const t = document.createElement("div");
+  t.style.cssText = `
+    position:fixed; bottom:24px; right:24px; z-index:9999;
+    background:var(--bg-panel); border:1px solid ${colors[type] || colors.info};
+    color:var(--ink); font-family:var(--font-mono); font-size:11px; letter-spacing:1px;
+    padding:10px 18px; border-radius:var(--radius);
+    box-shadow:0 8px 32px rgba(0,0,0,0.4);
+    animation: toastIn 0.2s ease;
+    pointer-events:none;
+  `;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
 }
-
-// === KEYBOARD ===
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
-});

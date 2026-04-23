@@ -59,7 +59,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "Planink-Setup-${version}.exe"
+      "artifactName": "Planink-Setup-${version}.exe",
+      "installerIcon": "./assets/favicon.ico"
     }
   }
 }
