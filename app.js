@@ -53,11 +53,18 @@ function closeModal() {
   document.getElementById("modal-box").style.width = "";
 }
 
+// Fermer en cliquant sur l'overlay (fond sombre), mais PAS sur la box elle-même
 document
   .getElementById("modal-overlay")
   .addEventListener("click", function (e) {
     if (e.target === this) closeModal();
   });
+
+// CRITIQUE : stopper la propagation des clics dans la modal-box
+// Empêche les clics sur inputs/buttons de remonter jusqu'aux <tr onclick="..."> du tableau en arrière-plan
+document.getElementById("modal-box").addEventListener("click", function (e) {
+  e.stopPropagation();
+});
 
 // --- NAV LISTENERS ---
 document.querySelectorAll(".nav-item").forEach((btn) => {
