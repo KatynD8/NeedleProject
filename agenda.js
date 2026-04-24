@@ -2,6 +2,22 @@
 let agendaYear = new Date().getFullYear();
 let agendaMonth = new Date().getMonth();
 
+// Couleurs des chips selon statut
+const RDV_CHIP_STYLE = {
+  confirme:
+    "background:rgba(39,174,96,0.18);color:#2ecc71;border:1px solid rgba(39,174,96,0.35)",
+  attente:
+    "background:rgba(241,196,15,0.18);color:#f1c40f;border:1px solid rgba(241,196,15,0.35)",
+  termine:
+    "background:rgba(41,128,185,0.18);color:#3498db;border:1px solid rgba(41,128,185,0.35)",
+  annule:
+    "background:rgba(192,57,43,0.18);color:#e74c3c;border:1px solid rgba(192,57,43,0.35)",
+};
+
+function rdvChipStyle(statut) {
+  return RDV_CHIP_STYLE[statut] || RDV_CHIP_STYLE.attente;
+}
+
 function renderAgenda() {
   const rdvs = DB.getRdvs();
   const today = new Date();
@@ -44,8 +60,8 @@ function renderAgenda() {
   function toISO(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
+    const j = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${j}`;
   }
   function isToday(d) {
     return toISO(d) === toISO(today);
@@ -91,7 +107,7 @@ function renderAgenda() {
                   .slice(0, 3)
                   .map(
                     (r) => `
-                  <div class="rdv-chip" title="${r.titre}">${r.heure} ${r.titre}</div>
+                  <div class="rdv-chip" style="${rdvChipStyle(r.statut)}" title="${r.titre}">${r.heure} ${r.titre}</div>
                 `,
                   )
                   .join("")}
@@ -112,20 +128,20 @@ function renderAgenda() {
               : upcoming
                   .map(
                     (r) => `
-            <div class="card" style="padding:12px;cursor:pointer" onclick="openRdvDetail(${r.id})">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                <div>
-                  <div style="font-size:12px;font-weight:500;margin-bottom:4px">${r.titre}</div>
-                  <div style="font-size:11px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
-                  <div style="font-size:11px;color:var(--accent);font-family:var(--font-mono);margin-top:4px">${formatDate(r.date)} · ${r.heure}</div>
-                </div>
-                <div style="text-align:right">
-                  <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-muted)">${r.duree}min</div>
-                  <div style="margin-top:4px">${statutBadge(r.statut)}</div>
+              <div class="card" style="padding:12px;cursor:pointer" onclick="openRdvDetail(${r.id})">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <div style="font-size:12px;font-weight:500;margin-bottom:4px">${r.titre}</div>
+                    <div style="font-size:11px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
+                    <div style="font-size:11px;color:var(--accent);font-family:var(--font-mono);margin-top:4px">${formatDate(r.date)} · ${r.heure}</div>
+                  </div>
+                  <div style="text-align:right">
+                    <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-muted)">${r.duree}min</div>
+                    <div style="margin-top:4px">${statutBadge(r.statut)}</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          `,
+            `,
                   )
                   .join("")
           }
@@ -219,6 +235,7 @@ function openDayDetail(iso) {
     day: "numeric",
     month: "long",
   });
+
   openModal(`
     <div class="modal-title">${label.toUpperCase()}</div>
     ${
@@ -245,6 +262,7 @@ function openDayDetail(iso) {
           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
             ${statutBadge(r.statut)}
             <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="closeModal();openContratFromRdv(${r.id})">◪ CONTRAT</button>
               <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
               <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
             </div>
@@ -329,15 +347,36 @@ function openEditRdv(id) {
 }
 
 async function saveEditRdv(id) {
+  const ancienStatut = DB.getRdvs().find((r) => r.id === id)?.statut;
+  const nouveauStatut = document.getElementById("erdv-statut").value;
+
   await DB.updateRdv(id, {
     clientId: parseInt(document.getElementById("erdv-client").value),
     titre: document.getElementById("erdv-titre").value.trim(),
     date: document.getElementById("erdv-date").value,
     heure: document.getElementById("erdv-heure").value,
     duree: parseInt(document.getElementById("erdv-duree").value),
-    statut: document.getElementById("erdv-statut").value,
+    statut: nouveauStatut,
     notes: document.getElementById("erdv-notes").value.trim(),
   });
+
   closeModal();
   renderAgenda();
+
+  // 🎯 Déclenchement automatique de la saisie finances si passage en "terminé"
+  if (ancienStatut !== "termine" && nouveauStatut === "termine") {
+    // Vérifier qu'il n'y a pas déjà une entrée finance liée à ce RDV
+    const dejaEnregistre = DB.getFinances().some((f) => f.rdvId === id);
+    if (!dejaEnregistre) {
+      setTimeout(() => openFinanceFromRdv(id), 200);
+    }
+  }
+}
+
+// Ouvre le formulaire contrat pré-rempli depuis un RDV
+function openContratFromRdv(rdvId) {
+  const r = DB.getRdvs().find((x) => x.id === rdvId);
+  if (!r) return;
+  navigate("contrats");
+  setTimeout(() => openNewContratFromRdv(r), 100);
 }

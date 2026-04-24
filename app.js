@@ -1,17 +1,14 @@
 // === APP ROUTER ===
 
 function navigate(page) {
-  const pageEl = document.getElementById("page-" + page);
-  const navEl = document.querySelector(`[data-page="${page}"]`);
-  if (!pageEl || !navEl) return;
   document
     .querySelectorAll(".page")
     .forEach((p) => p.classList.remove("active"));
   document
     .querySelectorAll(".nav-item")
     .forEach((n) => n.classList.remove("active"));
-  pageEl.classList.add("active");
-  navEl.classList.add("active");
+  document.getElementById("page-" + page).classList.add("active");
+  document.querySelector(`[data-page="${page}"]`).classList.add("active");
   renderPage(page);
 }
 
@@ -39,32 +36,21 @@ function renderPage(page) {
 }
 
 // --- MODAL ---
-// wide=true → modal plus large pour les fiches détail
-function openModal(html, wide = false) {
+function openModal(html) {
   document.getElementById("modal-content").innerHTML = html;
-  const box = document.getElementById("modal-box");
-  box.style.width = wide ? "720px" : "";
   document.getElementById("modal-overlay").classList.remove("hidden");
 }
 
 function closeModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
   document.getElementById("modal-content").innerHTML = "";
-  document.getElementById("modal-box").style.width = "";
 }
 
-// Fermer en cliquant sur l'overlay (fond sombre), mais PAS sur la box elle-même
 document
   .getElementById("modal-overlay")
   .addEventListener("click", function (e) {
     if (e.target === this) closeModal();
   });
-
-// CRITIQUE : stopper la propagation des clics dans la modal-box
-// Empêche les clics sur inputs/buttons de remonter jusqu'aux <tr onclick="..."> du tableau en arrière-plan
-document.getElementById("modal-box").addEventListener("click", function (e) {
-  e.stopPropagation();
-});
 
 // --- NAV LISTENERS ---
 document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -88,6 +74,14 @@ function formatDateShort(iso) {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 }
 
+function formatMoney(val) {
+  if (!val && val !== 0) return "—";
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(val);
+}
+
 function initials(nom, prenom) {
   return ((prenom || "")[0] || "") + ((nom || "")[0] || "");
 }
@@ -104,28 +98,10 @@ function statutBadge(statut) {
     annule: '<span class="badge badge-red">ANNULÉ</span>',
     termine: '<span class="badge badge-blue">TERMINÉ</span>',
   };
-  return map[statut] || `<span class="badge">${statut}</span>`;
+  return map[statut] || statut;
 }
 
-// Affiche un badge pour un lot stock (aiguille/encre lié à un RDV)
-function lotBadge(lotId) {
-  if (!lotId) return "";
-  const s = DB.getStocks().find((x) => x.id === lotId);
-  if (!s) return "";
-  return `<span class="badge badge-gray" style="font-size:9px">${s.nom}</span>`;
-}
-
-// --- FORMAT MONEY ---
-function formatMoney(val) {
-  return (
-    (val || 0).toLocaleString("fr-FR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }) + " €"
-  );
-}
-
-// --- TOAST NOTIFICATIONS ---
+// --- TOAST ---
 function toast(msg, type = "info") {
   const colors = {
     success: "var(--green)",
@@ -133,16 +109,15 @@ function toast(msg, type = "info") {
     info: "var(--accent)",
   };
   const t = document.createElement("div");
-  t.style.cssText = `
-    position:fixed; bottom:24px; right:24px; z-index:9999;
-    background:var(--bg-panel); border:1px solid ${colors[type] || colors.info};
-    color:var(--ink); font-family:var(--font-mono); font-size:11px; letter-spacing:1px;
-    padding:10px 18px; border-radius:var(--radius);
-    box-shadow:0 8px 32px rgba(0,0,0,0.4);
-    animation: toastIn 0.2s ease;
-    pointer-events:none;
-  `;
+  t.className = "toast";
+  t.style.cssText = `border-left:3px solid ${colors[type] || colors.info}`;
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2800);
+  requestAnimationFrame(() => t.classList.add("toast-show"));
+  setTimeout(() => {
+    t.classList.remove("toast-show");
+    setTimeout(() => t.remove(), 300);
+  }, 2800);
 }
+
+// NB : data.js appelle renderDashboard() lui-même une fois les données chargées.

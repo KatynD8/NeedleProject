@@ -57,7 +57,9 @@ function renderStocks() {
 
     ${
       cats.length === 0
-        ? `<div class="empty-state"><div class="empty-icon">◫</div><div class="empty-text">AUCUN PRODUIT</div></div>`
+        ? `
+      <div class="empty-state"><div class="empty-icon">◫</div><div class="empty-text">AUCUN PRODUIT</div></div>
+    `
         : cats
             .map((cat) => {
               const items = filtered.filter((s) => s.categorie === cat);
@@ -67,7 +69,7 @@ function renderStocks() {
           <table>
             <thead>
               <tr>
-                <th>PRODUIT</th><th>N° LOT</th><th>PÉREMPTION</th><th>QUANTITÉ</th><th>SEUIL</th><th>ÉTAT</th><th>PRIX UNIT.</th><th>VALEUR</th><th>ACTIONS</th>
+                <th>PRODUIT</th><th>QUANTITÉ</th><th>SEUIL</th><th>ÉTAT</th><th>N° LOT</th><th>PRIX UNIT.</th><th>VALEUR</th><th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
@@ -85,55 +87,29 @@ function renderStocks() {
                         : "badge-green";
                   const label =
                     s.quantite === 0 ? "RUPTURE" : ratio <= 1 ? "FAIBLE" : "OK";
-
-                  // Alerte péremption < 3 mois
-                  let peremBadge = "";
-                  if (s.datePeremption) {
-                    const diff =
-                      (new Date(s.datePeremption) - new Date()) /
-                      (1000 * 60 * 60 * 24);
-                    if (diff < 0)
-                      peremBadge = `<span class="badge badge-red" style="margin-left:4px;font-size:9px">PÉRIMÉ</span>`;
-                    else if (diff < 90)
-                      peremBadge = `<span class="badge badge-yellow" style="margin-left:4px;font-size:9px">BIENTÔT</span>`;
-                  }
-
                   return `
-                <tr>
-                  <td><span style="font-weight:500">${s.nom}</span></td>
-                  <td>
-                    ${
-                      s.numLot
-                        ? `<span class="text-mono" style="font-size:11px;color:var(--accent)">${s.numLot}</span>`
-                        : `<span style="color:var(--ink-muted);font-size:11px">—</span>`
-                    }
-                  </td>
-                  <td>
-                    ${
-                      s.datePeremption
-                        ? `<span class="text-mono" style="font-size:11px">${formatDate(s.datePeremption)}</span>${peremBadge}`
-                        : `<span style="color:var(--ink-muted);font-size:11px">—</span>`
-                    }
-                  </td>
-                  <td>
-                    <div style="font-family:var(--font-mono);font-size:13px">${s.quantite} <span style="color:var(--ink-muted);font-size:11px">${s.unite}</span></div>
-                    <div class="stock-bar-wrap" style="min-width:80px">
-                      <div class="stock-bar-track"><div class="stock-bar-fill ${cls}" style="width:${pct}%"></div></div>
-                    </div>
-                  </td>
-                  <td><span class="text-mono text-muted">${s.seuil} ${s.unite}</span></td>
-                  <td><span class="badge ${badge}">${label}</span></td>
-                  <td><span class="text-mono">${s.prix ? s.prix.toFixed(2) + " €" : "—"}</span></td>
-                  <td><span class="text-mono text-accent">${s.prix ? (s.quantite * s.prix).toFixed(2) + " €" : "—"}</span></td>
-                  <td>
-                    <div style="display:flex;gap:6px">
-                      <button class="btn btn-ghost btn-sm" onclick="openAdjustStock(${s.id})">±</button>
-                      <button class="btn btn-ghost btn-sm" onclick="openEditStock(${s.id})">EDIT</button>
-                      <button class="btn btn-danger btn-sm" onclick="deleteStock(${s.id})">✕</button>
-                    </div>
-                  </td>
-                </tr>
-              `;
+                  <tr>
+                    <td><span style="font-weight:500">${s.nom}</span></td>
+                    <td>
+                      <div style="font-family:var(--font-mono);font-size:13px">${s.quantite} <span style="color:var(--ink-muted);font-size:11px">${s.unite}</span></div>
+                      <div class="stock-bar-wrap" style="min-width:80px">
+                        <div class="stock-bar-track"><div class="stock-bar-fill ${cls}" style="width:${pct}%"></div></div>
+                      </div>
+                    </td>
+                    <td><span class="text-mono text-muted">${s.seuil} ${s.unite}</span></td>
+                    <td><span class="badge ${badge}">${label}</span></td>
+                    <td><span class="text-mono" style="font-size:10px;color:var(--ink-muted)">${s.lot || "—"}</span></td>
+                    <td><span class="text-mono">${s.prix ? s.prix.toFixed(2) + " €" : "—"}</span></td>
+                    <td><span class="text-mono text-accent">${s.prix ? (s.quantite * s.prix).toFixed(2) + " €" : "—"}</span></td>
+                    <td>
+                      <div style="display:flex;gap:6px">
+                        <button class="btn btn-ghost btn-sm" onclick="openAdjustStock(${s.id})">±</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openEditStock(${s.id})">EDIT</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteStock(${s.id})">✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
                 })
                 .join("")}
             </tbody>
@@ -179,18 +155,9 @@ function openAddStock() {
         <input class="form-input" id="s-prix" type="number" step="0.01" value="0">
       </div>
     </div>
-    <div style="border-top:1px solid var(--border);margin:12px 0 16px;padding-top:14px">
-      <div class="section-title" style="margin-bottom:10px">Traçabilité du lot</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">N° de lot</label>
-          <input class="form-input" id="s-lot" placeholder="EX : INT-2024-084">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Date de péremption</label>
-          <input class="form-input" id="s-perem" type="date">
-        </div>
-      </div>
+    <div class="form-group">
+      <label class="form-label">N° de lot (traçabilité)</label>
+      <input class="form-input" id="s-lot" placeholder="Ex: LOT-2024-08-A">
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
@@ -212,8 +179,7 @@ async function saveNewStock() {
     unite: document.getElementById("s-unite").value.trim() || "unités",
     seuil: parseFloat(document.getElementById("s-seuil").value) || 0,
     prix: parseFloat(document.getElementById("s-prix").value) || 0,
-    numLot: document.getElementById("s-lot").value.trim(),
-    datePeremption: document.getElementById("s-perem").value,
+    lot: document.getElementById("s-lot").value.trim(),
   });
   closeModal();
   renderStocks();
@@ -289,18 +255,9 @@ function openEditStock(id) {
         <input class="form-input" id="es-prix" type="number" step="0.01" value="${s.prix || 0}">
       </div>
     </div>
-    <div style="border-top:1px solid var(--border);margin:12px 0 16px;padding-top:14px">
-      <div class="section-title" style="margin-bottom:10px">Traçabilité du lot</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">N° de lot</label>
-          <input class="form-input" id="es-lot" value="${s.numLot || ""}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Date de péremption</label>
-          <input class="form-input" id="es-perem" type="date" value="${s.datePeremption || ""}">
-        </div>
-      </div>
+    <div class="form-group">
+      <label class="form-label">N° de lot (traçabilité)</label>
+      <input class="form-input" id="es-lot" value="${s.lot || ""}" placeholder="Ex: LOT-2024-08-A">
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
@@ -317,8 +274,7 @@ async function saveEditStock(id) {
     unite: document.getElementById("es-unite").value.trim(),
     seuil: parseFloat(document.getElementById("es-seuil").value) || 0,
     prix: parseFloat(document.getElementById("es-prix").value) || 0,
-    numLot: document.getElementById("es-lot").value.trim(),
-    datePeremption: document.getElementById("es-perem").value,
+    lot: document.getElementById("es-lot").value.trim(),
   });
   closeModal();
   renderStocks();

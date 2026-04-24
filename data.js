@@ -1,5 +1,10 @@
 // === DATA LAYER ===
+// Sauvegarde dans un vrai fichier JSON sur le disque via Electron
+// Fallback sur localStorage si ouvert dans un navigateur normal
+
 const IS_ELECTRON = typeof window.electronAPI !== "undefined";
+
+// Cache en mémoire (évite de relire le fichier à chaque opération)
 let _cache = null;
 
 async function loadCache() {
@@ -8,11 +13,11 @@ async function loadCache() {
     _cache = await window.electronAPI.loadData();
   } else {
     _cache = {
-      clients: JSON.parse(localStorage.getItem("inkmaster_clients") || "[]"),
-      rdvs: JSON.parse(localStorage.getItem("inkmaster_rdvs") || "[]"),
-      stocks: JSON.parse(localStorage.getItem("inkmaster_stocks") || "[]"),
-      contrats: JSON.parse(localStorage.getItem("inkmaster_contrats") || "[]"),
-      finances: JSON.parse(localStorage.getItem("inkmaster_finances") || "[]"),
+      clients: JSON.parse(localStorage.getItem("planink_clients") || "[]"),
+      rdvs: JSON.parse(localStorage.getItem("planink_rdvs") || "[]"),
+      stocks: JSON.parse(localStorage.getItem("planink_stocks") || "[]"),
+      contrats: JSON.parse(localStorage.getItem("planink_contrats") || "[]"),
+      finances: JSON.parse(localStorage.getItem("planink_finances") || "[]"),
     };
   }
   _cache.clients = _cache.clients || [];
@@ -27,15 +32,16 @@ async function persist() {
   if (IS_ELECTRON) {
     await window.electronAPI.saveData(_cache);
   } else {
-    localStorage.setItem("inkmaster_clients", JSON.stringify(_cache.clients));
-    localStorage.setItem("inkmaster_rdvs", JSON.stringify(_cache.rdvs));
-    localStorage.setItem("inkmaster_stocks", JSON.stringify(_cache.stocks));
-    localStorage.setItem("inkmaster_contrats", JSON.stringify(_cache.contrats));
-    localStorage.setItem("inkmaster_finances", JSON.stringify(_cache.finances));
+    localStorage.setItem("planink_clients", JSON.stringify(_cache.clients));
+    localStorage.setItem("planink_rdvs", JSON.stringify(_cache.rdvs));
+    localStorage.setItem("planink_stocks", JSON.stringify(_cache.stocks));
+    localStorage.setItem("planink_contrats", JSON.stringify(_cache.contrats));
+    localStorage.setItem("planink_finances", JSON.stringify(_cache.finances));
   }
 }
 
 const DB = {
+  // --- CLIENTS ---
   getClients() {
     return _cache.clients;
   },
@@ -49,10 +55,10 @@ const DB = {
     await persist();
     return client;
   },
-  async updateClient(id, u) {
+  async updateClient(id, updates) {
     const i = _cache.clients.findIndex((c) => c.id === id);
     if (i !== -1) {
-      _cache.clients[i] = { ..._cache.clients[i], ...u };
+      _cache.clients[i] = { ..._cache.clients[i], ...updates };
       await persist();
     }
   },
@@ -61,6 +67,7 @@ const DB = {
     await persist();
   },
 
+  // --- RDV ---
   getRdvs() {
     return _cache.rdvs;
   },
@@ -70,10 +77,10 @@ const DB = {
     await persist();
     return rdv;
   },
-  async updateRdv(id, u) {
+  async updateRdv(id, updates) {
     const i = _cache.rdvs.findIndex((r) => r.id === id);
     if (i !== -1) {
-      _cache.rdvs[i] = { ..._cache.rdvs[i], ...u };
+      _cache.rdvs[i] = { ..._cache.rdvs[i], ...updates };
       await persist();
     }
   },
@@ -82,6 +89,7 @@ const DB = {
     await persist();
   },
 
+  // --- STOCKS ---
   getStocks() {
     return _cache.stocks;
   },
@@ -91,10 +99,10 @@ const DB = {
     await persist();
     return item;
   },
-  async updateStock(id, u) {
+  async updateStock(id, updates) {
     const i = _cache.stocks.findIndex((s) => s.id === id);
     if (i !== -1) {
-      _cache.stocks[i] = { ..._cache.stocks[i], ...u };
+      _cache.stocks[i] = { ..._cache.stocks[i], ...updates };
       await persist();
     }
   },
@@ -103,27 +111,20 @@ const DB = {
     await persist();
   },
 
+  // --- CONTRATS ---
   getContrats() {
     return _cache.contrats;
   },
-  async addContrat(c) {
-    c.id = Date.now();
-    c.createdAt = new Date().toISOString();
-    _cache.contrats.push(c);
+  async addContrat(contrat) {
+    contrat.id = Date.now();
+    contrat.createdAt = new Date().toISOString();
+    _cache.contrats.push(contrat);
     await persist();
-    return c;
+    return contrat;
   },
   async deleteContrat(id) {
     _cache.contrats = _cache.contrats.filter((c) => c.id !== id);
     await persist();
-  },
-
-  // --- HELPERS RELATIONS ---
-  getRdvsForClient(clientId) {
-    return _cache.rdvs.filter((r) => r.clientId === clientId);
-  },
-  getContratsForClient(clientId) {
-    return _cache.contrats.filter((c) => c.clientId === clientId);
   },
 
   // --- FINANCES ---
@@ -132,8 +133,7 @@ const DB = {
   },
   getFinancesMonth(year, month) {
     return _cache.finances.filter((f) => {
-      if (!f.date) return false;
-      const d = new Date(f.date + "T12:00:00");
+      const d = new Date(f.date);
       return d.getFullYear() === year && d.getMonth() === month;
     });
   },
@@ -154,10 +154,10 @@ const DB = {
     await persist();
     return entry;
   },
-  async updateFinance(id, u) {
+  async updateFinance(id, updates) {
     const i = _cache.finances.findIndex((f) => f.id === id);
     if (i !== -1) {
-      _cache.finances[i] = { ..._cache.finances[i], ...u };
+      _cache.finances[i] = { ..._cache.finances[i], ...updates };
       await persist();
     }
   },
@@ -166,8 +166,10 @@ const DB = {
     await persist();
   },
 
+  // --- SEED DEMO DATA ---
   async seed() {
     if (_cache.clients.length > 0) return;
+
     _cache.clients = [
       {
         id: 1001,
@@ -203,11 +205,13 @@ const DB = {
         createdAt: "2024-03-01T09:00:00Z",
       },
     ];
+
     const today = new Date().toISOString().split("T")[0];
     const tomorrow = new Date(Date.now() + 86400000)
       .toISOString()
       .split("T")[0];
     const j2 = new Date(Date.now() + 172800000).toISOString().split("T")[0];
+
     _cache.rdvs = [
       {
         id: 2001,
@@ -240,6 +244,7 @@ const DB = {
         notes: "Première fois",
       },
     ];
+
     _cache.stocks = [
       {
         id: 3001,
@@ -314,6 +319,7 @@ const DB = {
         prix: 9.5,
       },
     ];
+
     _cache.contrats = [
       {
         id: 4001,
@@ -326,11 +332,14 @@ const DB = {
         createdAt: "2024-03-15T09:00:00Z",
       },
     ];
+
     _cache.finances = [];
+
     await persist();
   },
 };
 
+// === INIT ===
 loadCache().then(async () => {
   await DB.seed();
   if (typeof renderDashboard === "function") renderDashboard();

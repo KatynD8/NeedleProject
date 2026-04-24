@@ -58,7 +58,6 @@ function renderFinances() {
     return;
   }
 
-  const now = new Date();
   const all = DB.getFinancesMonth(finYear, finMonth);
   const ca = DB.getTotalCA(finYear, finMonth);
   const dep = DB.getTotalDepenses(finYear, finMonth);
@@ -115,7 +114,7 @@ function renderFinances() {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>DATE</th><th>TYPE</th><th>CATÉGORIE</th><th>DESCRIPTION</th><th>CLIENT</th><th>MODE</th><th>MONTANT</th><th>ACTIONS</th></tr>
+          <tr><th>DATE</th><th>TYPE</th><th>CATÉGORIE</th><th>DESCRIPTION</th><th>CLIENT / FOUR.</th><th>MODE</th><th>MONTANT</th><th>ACTIONS</th></tr>
         </thead>
         <tbody>
           ${all
@@ -152,7 +151,6 @@ function renderFinances() {
 }
 
 function renderFinancesStats() {
-  // Calculs annuels
   const year = finYear;
   const monthly = MOIS.map((m, i) => ({
     label: m,
@@ -165,7 +163,6 @@ function renderFinancesStats() {
   const bestMonth = [...monthly].sort((a, b) => b.ca - a.ca)[0];
   const maxVal = Math.max(...monthly.map((m) => Math.max(m.ca, m.dep)), 1);
 
-  // RDV terminés avec tarif
   const rdvs = DB.getRdvs().filter(
     (r) => r.statut === "termine" && r.tarif > 0,
   );
@@ -264,6 +261,92 @@ function renderFinancesStats() {
   `;
 }
 
+// === Modale pré-remplie depuis un RDV terminé ===
+function openFinanceFromRdv(rdvId) {
+  const r = DB.getRdvs().find((x) => x.id === rdvId);
+  if (!r) return;
+  const c = DB.getClient(r.clientId);
+  const clientNomStr = c ? `${c.prenom} ${c.nom}` : "";
+  const clients = DB.getClients();
+
+  openModal(`
+    <div class="modal-title">💰 ENREGISTRER LA SÉANCE</div>
+    <div style="padding:10px 12px;background:var(--accent-glow);border:1px solid var(--accent-dim);border-radius:var(--radius);margin-bottom:16px;font-size:12px;color:var(--accent);font-family:var(--font-mono)">
+      ${r.titre} · ${clientNomStr} · ${formatDate(r.date)}
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Montant (€) *</label>
+        <input class="form-input" id="f-montant" type="number" step="0.01" min="0" value="${r.tarif || 0}" style="font-size:18px;font-weight:700;text-align:center">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mode de paiement</label>
+        <select class="form-select" id="f-mode">
+          ${MODES_PAIEMENT.map((m) => `<option>${m}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Catégorie</label>
+        <select class="form-select" id="f-categorie">
+          ${CAT_RECETTES.map((c) => `<option ${c === "Séance" ? "selected" : ""}>${c}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client</label>
+        <select class="form-select" id="f-client">
+          <option value="">— Aucun</option>
+          ${clients.map((cl) => `<option value="${cl.id}" ${cl.id === r.clientId ? "selected" : ""}>${cl.prenom} ${cl.nom}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <input class="form-input" id="f-desc" value="${r.titre}${clientNomStr ? " — " + clientNomStr : ""}">
+    </div>
+    <input type="hidden" id="f-date-hidden" value="${r.date}">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal()">IGNORER</button>
+      <button class="btn btn-primary" onclick="saveFinanceFromRdv(${rdvId})">ENREGISTRER</button>
+    </div>
+  `);
+}
+
+async function saveFinanceFromRdv(rdvId) {
+  const montant = parseFloat(document.getElementById("f-montant").value);
+  const desc = document.getElementById("f-desc").value.trim();
+  if (!montant || !desc) {
+    toast("Montant et description obligatoires", "error");
+    return;
+  }
+  const clientId = parseInt(document.getElementById("f-client")?.value) || null;
+  const date = document.getElementById("f-date-hidden").value;
+
+  await DB.addFinance({
+    type: "recette",
+    montant,
+    description: desc,
+    categorie: document.getElementById("f-categorie").value,
+    date,
+    clientId,
+    fournisseur: "",
+    modePaiement: document.getElementById("f-mode").value,
+    rdvId,
+  });
+  // Sauvegarder le tarif sur le RDV pour les stats
+  await DB.updateRdv(rdvId, { tarif: montant });
+
+  closeModal();
+  toast("Recette enregistrée ✓", "success");
+  if (
+    typeof renderFinances === "function" &&
+    document.getElementById("page-finances")?.classList.contains("active")
+  ) {
+    renderFinances();
+  }
+}
+
 function openAddFinance(preType) {
   const clients = DB.getClients();
   openModal(`
@@ -311,9 +394,7 @@ function openAddFinance(preType) {
           ${MODES_PAIEMENT.map((m) => `<option>${m}</option>`).join("")}
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label"></label>
-      </div>
+      <div class="form-group"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Description *</label>
@@ -350,7 +431,6 @@ async function saveNewFinance() {
   await DB.addFinance({
     type,
     montant,
-    desc,
     description: desc,
     categorie: document.getElementById("f-categorie").value,
     date: document.getElementById("f-date").value,

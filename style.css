@@ -654,7 +654,7 @@ tbody td {
 /* === AGENDA === */
 .agenda-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(7, 1fr);
   gap: 2px;
 }
 
@@ -669,7 +669,7 @@ tbody td {
 }
 
 .agenda-day {
-  min-height: 80px;
+  height: 90px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -678,7 +678,6 @@ tbody td {
   transition: all var(--transition);
   position: relative;
   overflow: hidden;
-  min-width: 0;
 }
 
 .agenda-day:hover {
@@ -705,6 +704,7 @@ tbody td {
   font-weight: 700;
 }
 
+/* .rdv-chip couleur remplacée par inline style dynamique selon statut — voir agenda.js */
 .rdv-chip {
   font-size: 9px;
   padding: 2px 5px;
@@ -714,32 +714,6 @@ tbody td {
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
-  background: var(--accent-glow);
-  color: var(--accent);
-  border: 1px solid var(--accent-dim);
-  display: block;
-}
-
-.rdv-chip.chip-confirme {
-  background: rgba(39, 174, 96, 0.15);
-  color: #2ecc71;
-  border-color: rgba(39, 174, 96, 0.4);
-}
-.rdv-chip.chip-attente {
-  background: rgba(241, 196, 15, 0.15);
-  color: #f1c40f;
-  border-color: rgba(241, 196, 15, 0.4);
-}
-.rdv-chip.chip-termine {
-  background: rgba(41, 128, 185, 0.15);
-  color: #3498db;
-  border-color: rgba(41, 128, 185, 0.4);
-}
-.rdv-chip.chip-annule {
-  background: rgba(192, 57, 43, 0.15);
-  color: #e74c3c;
-  border-color: rgba(192, 57, 43, 0.4);
-  opacity: 0.7;
 }
 
 /* === CLIENT DETAIL === */
@@ -880,23 +854,24 @@ tbody td {
   width: 100%;
 }
 
-/* === TABS === */
+/* === TABS (Finances) === */
 .tabs {
   display: flex;
-  gap: 0;
+  gap: 4px;
+  margin-bottom: 20px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 22px;
+  padding-bottom: 0;
 }
 
 .tab-btn {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--ink-muted);
+  padding: 8px 16px;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 2px;
-  padding: 10px 20px;
+  color: var(--ink-muted);
   cursor: pointer;
   transition: all var(--transition);
   margin-bottom: -1px;
@@ -910,14 +885,7 @@ tbody td {
   border-bottom-color: var(--accent);
 }
 
-/* === BADGE GRAY === */
-.badge-gray {
-  background: rgba(120, 120, 140, 0.15);
-  color: var(--ink-muted);
-  border: 1px solid rgba(120, 120, 140, 0.3);
-}
-
-/* === PERF BARS (finances stats) === */
+/* === PERF BAR (Stats finances) === */
 .perf-bar-row {
   display: flex;
   align-items: center;
@@ -928,13 +896,13 @@ tbody td {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--ink-muted);
-  width: 28px;
+  width: 30px;
   flex-shrink: 0;
 }
 
 .perf-bar-track {
   flex: 1;
-  height: 14px;
+  height: 6px;
   background: var(--bg-base);
   border-radius: 3px;
   overflow: hidden;
@@ -945,33 +913,48 @@ tbody td {
   height: 100%;
   background: var(--accent);
   border-radius: 3px;
-  opacity: 0.75;
   transition: width 0.6s ease;
-  min-width: 2px;
 }
 
 .perf-bar-value {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--accent);
+  color: var(--green);
   width: 72px;
   text-align: right;
   flex-shrink: 0;
 }
 
-/* === TOAST ANIMATION === */
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* === BADGE GRAY === */
+.badge-gray {
+  background: rgba(122, 122, 138, 0.15);
+  color: var(--ink-muted);
+  border: 1px solid rgba(122, 122, 138, 0.25);
 }
 
-/* === MISSING UTILITIES === */
-.mb-3 {
-  margin-bottom: 24px;
+/* === TOAST === */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  transform: translateY(12px);
+  opacity: 0;
+  transition: all 0.25s ease;
+  max-width: 320px;
 }
+
+.toast.toast-show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* rdv-chip : voir règle principale ci-dessus */
