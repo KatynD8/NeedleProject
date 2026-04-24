@@ -41,6 +41,17 @@ function renderAgenda() {
     });
   }
 
+  function toISO(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  function isToday(d) {
+    return toISO(d) === toISO(today);
+  }
+
+  const todayStr = toISO(today);
   const upcoming = rdvs
     .filter((r) => r.date >= todayStr && r.statut !== "annule")
     .sort(
@@ -80,7 +91,7 @@ function renderAgenda() {
                   .slice(0, 3)
                   .map(
                     (r) => `
-                  <div class="rdv-chip" title="${r.titre} — ${clientName(r.clientId)}">${r.heure} ${r.titre}</div>
+                  <div class="rdv-chip" title="${r.titre}">${r.heure} ${r.titre}</div>
                 `,
                   )
                   .join("")}
@@ -235,7 +246,7 @@ function openDayDetail(iso) {
             ${statutBadge(r.statut)}
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRdvFromDay(${r.id},'${iso}')">✕</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
             </div>
           </div>
         </div>
@@ -329,5 +340,4 @@ async function saveEditRdv(id) {
   });
   closeModal();
   renderAgenda();
-  toast("RDV mis à jour", "success");
 }
