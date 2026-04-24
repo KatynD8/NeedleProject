@@ -41,14 +41,6 @@ function renderAgenda() {
     });
   }
 
-  function toISO(d) {
-    return d.toISOString().split("T")[0];
-  }
-  function isToday(d) {
-    return toISO(d) === toISO(today);
-  }
-
-  const todayStr = toISO(today);
   const upcoming = rdvs
     .filter((r) => r.date >= todayStr && r.statut !== "annule")
     .sort(
@@ -88,7 +80,7 @@ function renderAgenda() {
                   .slice(0, 3)
                   .map(
                     (r) => `
-                  <div class="rdv-chip chip-${r.statut}" title="${r.titre} — ${r.statut}">${r.heure} ${r.titre}</div>
+                  <div class="rdv-chip" title="${r.titre} — ${clientName(r.clientId)}">${r.heure} ${r.titre}</div>
                 `,
                   )
                   .join("")}
@@ -243,8 +235,7 @@ function openDayDetail(iso) {
             ${statutBadge(r.statut)}
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
-              <button class="btn btn-primary btn-sm" onclick="closeModal();genererContratDepuisRdv(${r.id})">📄</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRdvFromDay(${r.id},'${iso}')">✕</button>
             </div>
           </div>
         </div>
@@ -338,107 +329,5 @@ async function saveEditRdv(id) {
   });
   closeModal();
   renderAgenda();
-}
-
-// === EXTENSIONS : Contrat depuis RDV + Revenu automatique ===
-
-// Remplace saveEditRdv pour détecter le passage en "terminé"
-// (on écrase la version précédente via redéclaration — la dernière définition JS gagne)
-async function saveEditRdv(id) {
-  const rdvBefore = DB.getRdvs().find((x) => x.id === id);
-  const nouveauStatut = document.getElementById("erdv-statut").value;
-  const etaitDejaTermine = rdvBefore && rdvBefore.statut === "termine";
-
-  await DB.updateRdv(id, {
-    clientId: parseInt(document.getElementById("erdv-client").value),
-    titre: document.getElementById("erdv-titre").value.trim(),
-    date: document.getElementById("erdv-date").value,
-    heure: document.getElementById("erdv-heure").value,
-    duree: parseInt(document.getElementById("erdv-duree").value),
-    statut: nouveauStatut,
-    notes: document.getElementById("erdv-notes").value.trim(),
-  });
-  closeModal();
-
-  if (nouveauStatut === "termine" && !etaitDejaTermine) {
-    const rdv = DB.getRdvs().find((x) => x.id === id);
-    setTimeout(() => openRevenuePrompt(rdv), 150);
-  } else {
-    renderAgenda();
-  }
-}
-
-function openRevenuePrompt(rdv) {
-  const client = clientName(rdv.clientId);
-  openModal(`
-    <div class="modal-title">SÉANCE TERMINÉE ✓</div>
-    <div style="text-align:center;padding:12px 0 20px">
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--green);letter-spacing:2px">RDV MARQUÉ COMME TERMINÉ</div>
-      <div style="margin-top:6px;font-size:13px;color:var(--ink-muted)">${rdv.titre} — ${client}</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Montant encaissé (€)</label>
-      <div style="display:flex;align-items:center;gap:10px">
-        <input class="form-input" id="rev-montant" type="number" step="0.01" min="0" placeholder="250.00" style="font-size:18px;text-align:center;flex:1">
-        <span style="font-family:var(--font-display);font-size:24px;color:var(--accent)">€</span>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Mode de paiement</label>
-        <select class="form-select" id="rev-mode">
-          <option>CB</option><option>Espèces</option><option>Virement</option>
-          <option>Chèque</option><option>Lydia</option><option>PayPal</option><option>Autre</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Durée · Date</label>
-        <div class="form-input" style="color:var(--ink-muted);cursor:default">${rdv.duree} min · ${formatDate(rdv.date)}</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
-      <button class="btn btn-ghost" onclick="closeModal();renderAgenda();renderDashboard()">IGNORER</button>
-      <button class="btn btn-primary" onclick="saveRevenue(${rdv.id})">💰 ENREGISTRER</button>
-    </div>
-  `);
-}
-
-async function saveRevenue(rdvId) {
-  const montant = parseFloat(document.getElementById("rev-montant").value) || 0;
-  if (montant > 0) {
-    const rdv = DB.getRdvs().find((x) => x.id === rdvId);
-    await DB.addFinance({
-      type: "recette",
-      montant,
-      description: rdv ? rdv.titre : "Séance",
-      categorie: "Séance",
-      date: rdv ? rdv.date : new Date().toISOString().split("T")[0],
-      clientId: rdv ? rdv.clientId : null,
-      modePaiement: document.getElementById("rev-mode")?.value || "CB",
-    });
-    toast(`${montant.toFixed(2)} € enregistré`, "success");
-  }
-  closeModal();
-  renderAgenda();
-  renderDashboard();
-}
-
-function genererContratDepuisRdv(rdvId) {
-  const rdv = DB.getRdvs().find((x) => x.id === rdvId);
-  if (!rdv) return;
-  const client = DB.getClient(rdv.clientId);
-  navigate("contrats");
-  setTimeout(() => {
-    openNewContratPreFilled({
-      clientId: rdv.clientId,
-      description: rdv.titre,
-      date: rdv.date,
-      allergies: client ? client.allergies || "" : "",
-    });
-  }, 100);
-}
-
-function openAddRdvForClient(clientId) {
-  navigate("agenda");
-  setTimeout(() => openAddRdv(clientId), 100);
+  toast("RDV mis à jour", "success");
 }
