@@ -18,6 +18,7 @@ async function loadCache() {
       stocks: JSON.parse(localStorage.getItem("planink_stocks") || "[]"),
       contrats: JSON.parse(localStorage.getItem("planink_contrats") || "[]"),
       finances: JSON.parse(localStorage.getItem("planink_finances") || "[]"),
+      settings: JSON.parse(localStorage.getItem("planink_settings") || "null"),
     };
   }
   _cache.clients = _cache.clients || [];
@@ -25,6 +26,18 @@ async function loadCache() {
   _cache.stocks = _cache.stocks || [];
   _cache.contrats = _cache.contrats || [];
   _cache.finances = _cache.finances || [];
+  _cache.settings = _cache.settings || {
+    artisteNom: "The Artist",
+    artisteInitiales: "TA",
+    studioNom: "Plan'Ink Studio",
+    studioAdresse: "",
+    studioVille: "",
+    studioTel: "",
+    studioEmail: "",
+    studioSiret: "",
+    studioSite: "",
+    logoUrl: "",
+  };
   return _cache;
 }
 
@@ -37,6 +50,7 @@ async function persist() {
     localStorage.setItem("planink_stocks", JSON.stringify(_cache.stocks));
     localStorage.setItem("planink_contrats", JSON.stringify(_cache.contrats));
     localStorage.setItem("planink_finances", JSON.stringify(_cache.finances));
+    localStorage.setItem("planink_settings", JSON.stringify(_cache.settings));
   }
 }
 
@@ -125,6 +139,16 @@ const DB = {
   async deleteContrat(id) {
     _cache.contrats = _cache.contrats.filter((c) => c.id !== id);
     await persist();
+  },
+
+  // --- SETTINGS ---
+  getSettings() {
+    return _cache.settings;
+  },
+  async saveSettings(updates) {
+    _cache.settings = { ..._cache.settings, ...updates };
+    await persist();
+    return _cache.settings;
   },
 
   // --- FINANCES ---
@@ -342,5 +366,9 @@ const DB = {
 // === INIT ===
 loadCache().then(async () => {
   await DB.seed();
+  // Appliquer le profil artiste dans la sidebar dès le démarrage
+  if (typeof _applySidebarSettings === "function") {
+    _applySidebarSettings(DB.getSettings());
+  }
   if (typeof renderDashboard === "function") renderDashboard();
 });

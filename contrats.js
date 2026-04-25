@@ -1,5 +1,15 @@
 // === CONTRATS DE CONSENTEMENT ===
 
+// ─── CONFIGURATION STUDIO ───────────────────────────────────────────────────
+// Modifier ces valeurs avec les infos de votre studio
+const STUDIO_INFO = {
+  nom: "Plan'Ink Studio",
+  adresse: "Votre adresse — Code postal Ville",
+  tel: "XX XX XX XX XX",
+  email: "contact@votrestudio.fr",
+};
+// ────────────────────────────────────────────────────────────────────────────
+
 function renderContrats() {
   const contrats = DB.getContrats().sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
@@ -69,14 +79,6 @@ function renderContrats() {
   `;
 }
 
-// Récupère les numéros de lot renseignés dans les stocks pour une catégorie donnée
-function getLotsStock(categorie) {
-  return DB.getStocks()
-    .filter((s) => s.categorie === categorie && s.lot && s.lot.trim())
-    .map((s) => `${s.nom} : ${s.lot}`)
-    .join(" | ");
-}
-
 function openNewContrat() {
   const clients = DB.getClients();
   const today = new Date().toISOString().split("T")[0];
@@ -128,17 +130,6 @@ function openNewContrat() {
       <label class="form-label">Notes médicales</label>
       <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements..."></textarea>
     </div>
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--ink-muted);text-transform:uppercase;margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border)">Traçabilité matériel stérile</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Aiguille(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-aiguille" placeholder="Laisser vide si inconnu" value="${getLotsStock("Aiguilles")}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Encre(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-encre" placeholder="Laisser vide si inconnu" value="${getLotsStock("Encres")}">
-      </div>
-    </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-ghost" onclick="previewNewContrat()">APERÇU</button>
@@ -169,8 +160,6 @@ function getContratData() {
     signe: document.getElementById("ct-signe").value === "true",
     allergies: document.getElementById("ct-allergies").value.trim(),
     medical: document.getElementById("ct-medical").value.trim(),
-    lotAiguille: document.getElementById("ct-lot-aiguille")?.value.trim() || "",
-    lotEncre: document.getElementById("ct-lot-encre")?.value.trim() || "",
   };
 }
 
@@ -191,8 +180,8 @@ function generateContratHTML(contrat) {
   return `
     <div class="contrat-preview">
       <div class="studio-header">
-        <h2>INKMASTER STUDIO</h2>
-        <div style="font-size:12px;color:#555">123 Rue de l'Encre — 75000 Paris<br>Tél : 01 23 45 67 89 — contact@inkmaster.fr</div>
+        <h2>${STUDIO_INFO.nom.toUpperCase()}</h2>
+        <div style="font-size:12px;color:#555">${STUDIO_INFO.adresse}<br>Tél : ${STUDIO_INFO.tel} — ${STUDIO_INFO.email}</div>
         <h2 style="margin-top:12px;font-size:16px;letter-spacing:2px">FORMULAIRE DE CONSENTEMENT ÉCLAIRÉ</h2>
         <div style="font-size:11px;color:#777;margin-top:4px">Document légal — à conserver</div>
       </div>
@@ -222,36 +211,7 @@ function generateContratHTML(contrat) {
       <p><strong>Allergies connues :</strong> ${contrat.allergies || "Aucune connue"}</p>
       ${contrat.medical ? `<p><strong>Informations médicales complémentaires :</strong> ${contrat.medical}</p>` : ""}
 
-      <h3>4. TRAÇABILITÉ DU MATÉRIEL STÉRILE</h3>
-      <p style="font-size:11px;color:#666;margin-bottom:8px">Conformément à la réglementation en vigueur, les numéros de lot du matériel à usage unique utilisé lors de cette séance sont consignés ci-dessous.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-        <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">Matériel</th>
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">Désignation</th>
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">N° de lot</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Aiguille(s)</td>
-            <td style="padding:8px 10px;border:1px solid #ddd;min-width:160px">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd;min-width:140px">${contrat.lotAiguille || "&nbsp;"}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Encre(s)</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">${contrat.lotEncre || "&nbsp;"}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Autre matériel</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h3>5. CONSENTEMENT ÉCLAIRÉ</h3>
+      <h3>4. CONSENTEMENT ÉCLAIRÉ</h3>
       <p>Je reconnais avoir été informé(e) des éléments suivants :</p>
       <ul style="margin:8px 0 8px 20px;line-height:1.8">
         <li>Le tatouage est un acte permanent et irréversible</li>
@@ -263,7 +223,7 @@ function generateContratHTML(contrat) {
       <p>Je confirme être majeur(e), en bonne santé, et ne pas être sous l'influence d'alcool ou de substances.</p>
       <p>J'ai lu et compris les informations ci-dessus. Je consens librement à la réalisation de ce tatouage.</p>
 
-      <h3>6. SOINS POST-TATOUAGE</h3>
+      <h3>5. SOINS POST-TATOUAGE</h3>
       <ul style="margin:8px 0 8px 20px;line-height:1.8">
         <li>Garder le film protecteur en place selon les indications</li>
         <li>Nettoyer délicatement à l'eau tiède et savon doux</li>
@@ -272,7 +232,7 @@ function generateContratHTML(contrat) {
         <li>Ne pas gratter ou frotter la zone tatouée</li>
       </ul>
 
-      <h3>7. AUTORISATION PHOTOGRAPHIQUE</h3>
+      <h3>6. AUTORISATION PHOTOGRAPHIQUE</h3>
       <p>J'autorise / Je n'autorise pas le studio à utiliser des photos à des fins promotionnelles (biffer la mention inutile).</p>
 
       <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:40px">
@@ -288,7 +248,7 @@ function generateContratHTML(contrat) {
         </div>
       </div>
       <div style="margin-top:20px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:12px">
-        Document établi le ${new Date().toLocaleDateString("fr-FR")} — InkMaster Studio — Conforme RGPD
+        Document établi le ${new Date().toLocaleDateString("fr-FR")} — ${STUDIO_INFO.nom} — Conforme RGPD
       </div>
     </div>
   `;
@@ -363,78 +323,4 @@ async function deleteContrat(id) {
     await DB.deleteContrat(id);
     renderContrats();
   }
-}
-
-// Ouvre la modale contrat pré-remplie depuis un RDV
-function openNewContratFromRdv(rdv) {
-  const clients = DB.getClients();
-  const c = DB.getClient(rdv.clientId);
-  openModal(`
-    <div class="modal-title">NOUVEAU CONTRAT</div>
-    <div style="padding:10px 12px;background:var(--accent-glow);border:1px solid var(--accent-dim);border-radius:var(--radius);margin-bottom:16px;font-size:12px;color:var(--accent);font-family:var(--font-mono)">
-      Pré-rempli depuis · ${rdv.titre} · ${formatDate(rdv.date)}
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Client</label>
-        <select class="form-select" id="ct-client" onchange="fillContratClient()">
-          <option value="">Sélectionner...</option>
-          ${clients.map((cl) => `<option value="${cl.id}" ${cl.id === rdv.clientId ? "selected" : ""}>${cl.prenom} ${cl.nom}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" id="ct-date" type="date" value="${rdv.date}">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Description du tatouage</label>
-      <input class="form-input" id="ct-desc" value="${rdv.titre}">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Zone corporelle</label>
-        <select class="form-select" id="ct-zone">
-          <option>Bras droit</option><option>Bras gauche</option>
-          <option>Avant-bras droit</option><option>Avant-bras gauche</option>
-          <option>Épaule droite</option><option>Épaule gauche</option>
-          <option>Dos</option><option>Poitrine</option><option>Ventre</option>
-          <option>Cuisse droite</option><option>Cuisse gauche</option>
-          <option>Mollet droit</option><option>Mollet gauche</option>
-          <option>Cheville</option><option>Pied</option><option>Cou</option><option>Tête</option><option>Autre</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Signé ?</label>
-        <select class="form-select" id="ct-signe">
-          <option value="false">Non (à signer)</option>
-          <option value="true">Oui (signé)</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Allergies (pré-remplies depuis la fiche client)</label>
-      <input class="form-input" id="ct-allergies" value="${c ? c.allergies || "" : ""}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notes médicales</label>
-      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements..."></textarea>
-    </div>
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--ink-muted);text-transform:uppercase;margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border)">Traçabilité matériel stérile</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Aiguille(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-aiguille" placeholder="Laisser vide si inconnu" value="${getLotsStock("Aiguilles")}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Encre(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-encre" placeholder="Laisser vide si inconnu" value="${getLotsStock("Encres")}">
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
-      <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      <button class="btn btn-ghost" onclick="previewNewContrat()">APERÇU</button>
-      <button class="btn btn-primary" onclick="saveNewContrat()">GÉNÉRER</button>
-    </div>
-  `);
 }

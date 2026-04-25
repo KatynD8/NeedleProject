@@ -8,7 +8,8 @@ function navigate(page) {
     .querySelectorAll(".nav-item")
     .forEach((n) => n.classList.remove("active"));
   document.getElementById("page-" + page).classList.add("active");
-  document.querySelector(`[data-page="${page}"]`).classList.add("active");
+  const navBtn = document.querySelector(`[data-page="${page}"]`);
+  if (navBtn) navBtn.classList.add("active");
   renderPage(page);
 }
 
@@ -31,6 +32,9 @@ function renderPage(page) {
       break;
     case "finances":
       renderFinances();
+      break;
+    case "settings":
+      renderSettings();
       break;
   }
 }
@@ -56,6 +60,9 @@ document
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => navigate(btn.dataset.page));
 });
+document
+  .getElementById("btn-settings")
+  .addEventListener("click", () => navigate("settings"));
 
 // --- HELPERS ---
 function formatDate(iso) {
