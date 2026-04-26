@@ -60,9 +60,10 @@ document
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => navigate(btn.dataset.page));
 });
-document
-  .getElementById("btn-settings")
-  .addEventListener("click", () => navigate("settings"));
+const _btnSettings = document.getElementById("btn-settings");
+if (_btnSettings) {
+  _btnSettings.addEventListener("click", () => navigate("settings"));
+}
 
 // --- HELPERS ---
 function formatDate(iso) {

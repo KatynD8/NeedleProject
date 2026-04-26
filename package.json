@@ -31,20 +31,7 @@
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "index.html",
-      "style.css",
-      "main.js",
-      "preload.js",
-      "data.js",
-      "app.js",
-      "dashboard.js",
-      "clients.js",
-      "agenda.js",
-      "stocks.js",
-      "contrats.js",
-      "finances.js"
-    ],
+   
     "win": {
        "icon": "build/icon.ico",
       "target": [
