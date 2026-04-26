@@ -1,4 +1,4 @@
-// === APP ROUTER ===
+// === APP ROUTER — v1.1 ===
 
 function navigate(page) {
   document
@@ -8,8 +8,7 @@ function navigate(page) {
     .querySelectorAll(".nav-item")
     .forEach((n) => n.classList.remove("active"));
   document.getElementById("page-" + page).classList.add("active");
-  const navBtn = document.querySelector(`[data-page="${page}"]`);
-  if (navBtn) navBtn.classList.add("active");
+  document.querySelector(`[data-page="${page}"]`).classList.add("active");
   renderPage(page);
 }
 
@@ -29,9 +28,6 @@ function renderPage(page) {
       break;
     case "contrats":
       renderContrats();
-      break;
-    case "finances":
-      renderFinances();
       break;
     case "settings":
       renderSettings();
@@ -60,9 +56,57 @@ document
 document.querySelectorAll(".nav-item").forEach((btn) => {
   btn.addEventListener("click", () => navigate(btn.dataset.page));
 });
-const _btnSettings = document.getElementById("btn-settings");
-if (_btnSettings) {
-  _btnSettings.addEventListener("click", () => navigate("settings"));
+
+// --- TOAST ---
+function toast(message, type = "success") {
+  // Supprime un toast existant
+  const existing = document.getElementById("toast-notification");
+  if (existing) existing.remove();
+
+  const colors = {
+    success: { bg: "var(--green)", text: "#fff" },
+    error: { bg: "var(--red)", text: "#fff" },
+    info: { bg: "var(--accent)", text: "#0a0a0b" },
+  };
+  const { bg, text } = colors[type] || colors.success;
+
+  const el = document.createElement("div");
+  el.id = "toast-notification";
+  el.textContent = message;
+  Object.assign(el.style, {
+    position: "fixed",
+    bottom: "28px",
+    right: "28px",
+    background: bg,
+    color: text,
+    padding: "12px 20px",
+    borderRadius: "var(--radius)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "12px",
+    letterSpacing: "1px",
+    zIndex: "9999",
+    boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+    opacity: "0",
+    transform: "translateY(8px)",
+    transition: "opacity 0.2s ease, transform 0.2s ease",
+  });
+
+  document.body.appendChild(el);
+
+  // Apparition
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.style.opacity = "1";
+      el.style.transform = "translateY(0)";
+    });
+  });
+
+  // Disparition après 2.8s
+  setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(8px)";
+    setTimeout(() => el.remove(), 250);
+  }, 2800);
 }
 
 // --- HELPERS ---
@@ -82,14 +126,6 @@ function formatDateShort(iso) {
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 }
 
-function formatMoney(val) {
-  if (!val && val !== 0) return "—";
-  return new Intl.NumberFormat("fr-FR", {
-    style: "currency",
-    currency: "EUR",
-  }).format(val);
-}
-
 function initials(nom, prenom) {
   return ((prenom || "")[0] || "") + ((nom || "")[0] || "");
 }
@@ -107,25 +143,6 @@ function statutBadge(statut) {
     termine: '<span class="badge badge-blue">TERMINÉ</span>',
   };
   return map[statut] || statut;
-}
-
-// --- TOAST ---
-function toast(msg, type = "info") {
-  const colors = {
-    success: "var(--green)",
-    error: "var(--red)",
-    info: "var(--accent)",
-  };
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.style.cssText = `border-left:3px solid ${colors[type] || colors.info}`;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  requestAnimationFrame(() => t.classList.add("toast-show"));
-  setTimeout(() => {
-    t.classList.remove("toast-show");
-    setTimeout(() => t.remove(), 300);
-  }, 2800);
 }
 
 // NB : data.js appelle renderDashboard() lui-même une fois les données chargées.

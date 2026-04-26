@@ -1,10 +1,9 @@
-// === DATA LAYER ===
+// === DATA LAYER — v1.1 ===
 // Sauvegarde dans un vrai fichier JSON sur le disque via Electron
 // Fallback sur localStorage si ouvert dans un navigateur normal
 
 const IS_ELECTRON = typeof window.electronAPI !== "undefined";
 
-// Cache en mémoire (évite de relire le fichier à chaque opération)
 let _cache = null;
 
 async function loadCache() {
@@ -13,31 +12,18 @@ async function loadCache() {
     _cache = await window.electronAPI.loadData();
   } else {
     _cache = {
-      clients: JSON.parse(localStorage.getItem("planink_clients") || "[]"),
-      rdvs: JSON.parse(localStorage.getItem("planink_rdvs") || "[]"),
-      stocks: JSON.parse(localStorage.getItem("planink_stocks") || "[]"),
-      contrats: JSON.parse(localStorage.getItem("planink_contrats") || "[]"),
-      finances: JSON.parse(localStorage.getItem("planink_finances") || "[]"),
-      settings: JSON.parse(localStorage.getItem("planink_settings") || "null"),
+      clients: JSON.parse(localStorage.getItem("inkmaster_clients") || "[]"),
+      rdvs: JSON.parse(localStorage.getItem("inkmaster_rdvs") || "[]"),
+      stocks: JSON.parse(localStorage.getItem("inkmaster_stocks") || "[]"),
+      contrats: JSON.parse(localStorage.getItem("inkmaster_contrats") || "[]"),
+      settings: JSON.parse(localStorage.getItem("inkmaster_settings") || "{}"),
     };
   }
   _cache.clients = _cache.clients || [];
   _cache.rdvs = _cache.rdvs || [];
   _cache.stocks = _cache.stocks || [];
   _cache.contrats = _cache.contrats || [];
-  _cache.finances = _cache.finances || [];
-  _cache.settings = _cache.settings || {
-    artisteNom: "The Artist",
-    artisteInitiales: "TA",
-    studioNom: "Plan'Ink Studio",
-    studioAdresse: "",
-    studioVille: "",
-    studioTel: "",
-    studioEmail: "",
-    studioSiret: "",
-    studioSite: "",
-    logoUrl: "",
-  };
+  _cache.settings = _cache.settings || {};
   return _cache;
 }
 
@@ -45,12 +31,11 @@ async function persist() {
   if (IS_ELECTRON) {
     await window.electronAPI.saveData(_cache);
   } else {
-    localStorage.setItem("planink_clients", JSON.stringify(_cache.clients));
-    localStorage.setItem("planink_rdvs", JSON.stringify(_cache.rdvs));
-    localStorage.setItem("planink_stocks", JSON.stringify(_cache.stocks));
-    localStorage.setItem("planink_contrats", JSON.stringify(_cache.contrats));
-    localStorage.setItem("planink_finances", JSON.stringify(_cache.finances));
-    localStorage.setItem("planink_settings", JSON.stringify(_cache.settings));
+    localStorage.setItem("inkmaster_clients", JSON.stringify(_cache.clients));
+    localStorage.setItem("inkmaster_rdvs", JSON.stringify(_cache.rdvs));
+    localStorage.setItem("inkmaster_stocks", JSON.stringify(_cache.stocks));
+    localStorage.setItem("inkmaster_contrats", JSON.stringify(_cache.contrats));
+    localStorage.setItem("inkmaster_settings", JSON.stringify(_cache.settings));
   }
 }
 
@@ -145,48 +130,9 @@ const DB = {
   getSettings() {
     return _cache.settings;
   },
+  // Merge partiel : n'écrase que les clés passées (utile pour logoBase64 seul)
   async saveSettings(updates) {
     _cache.settings = { ..._cache.settings, ...updates };
-    await persist();
-    return _cache.settings;
-  },
-
-  // --- FINANCES ---
-  getFinances() {
-    return _cache.finances;
-  },
-  getFinancesMonth(year, month) {
-    return _cache.finances.filter((f) => {
-      const d = new Date(f.date);
-      return d.getFullYear() === year && d.getMonth() === month;
-    });
-  },
-  getTotalCA(year, month) {
-    return this.getFinancesMonth(year, month)
-      .filter((f) => f.type === "recette")
-      .reduce((s, f) => s + (f.montant || 0), 0);
-  },
-  getTotalDepenses(year, month) {
-    return this.getFinancesMonth(year, month)
-      .filter((f) => f.type === "depense")
-      .reduce((s, f) => s + (f.montant || 0), 0);
-  },
-  async addFinance(entry) {
-    entry.id = Date.now();
-    entry.createdAt = new Date().toISOString();
-    _cache.finances.push(entry);
-    await persist();
-    return entry;
-  },
-  async updateFinance(id, updates) {
-    const i = _cache.finances.findIndex((f) => f.id === id);
-    if (i !== -1) {
-      _cache.finances[i] = { ..._cache.finances[i], ...updates };
-      await persist();
-    }
-  },
-  async deleteFinance(id) {
-    _cache.finances = _cache.finances.filter((f) => f.id !== id);
     await persist();
   },
 
@@ -353,11 +299,11 @@ const DB = {
         zone: "Dos",
         date: "2024-03-15",
         signe: true,
+        prixTotal: 800,
+        acompte: 200,
         createdAt: "2024-03-15T09:00:00Z",
       },
     ];
-
-    _cache.finances = [];
 
     await persist();
   },
@@ -366,9 +312,6 @@ const DB = {
 // === INIT ===
 loadCache().then(async () => {
   await DB.seed();
-  // Appliquer le profil artiste dans la sidebar dès le démarrage
-  if (typeof _applySidebarSettings === "function") {
-    _applySidebarSettings(DB.getSettings());
-  }
+  if (typeof applyLogoToSidebar === "function") applyLogoToSidebar();
   if (typeof renderDashboard === "function") renderDashboard();
 });

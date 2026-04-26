@@ -1,4 +1,4 @@
-// === CONTRATS DE CONSENTEMENT ===
+// === CONTRATS DE CONSENTEMENT — v1.1 ===
 
 function renderContrats() {
   const contrats = DB.getContrats().sort((a, b) =>
@@ -23,12 +23,16 @@ function renderContrats() {
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>CLIENT</th><th>DESCRIPTION</th><th>ZONE</th><th>DATE</th><th>SIGNÉ</th><th>ACTIONS</th></tr>
+          <tr>
+            <th>CLIENT</th><th>DESCRIPTION</th><th>ZONE</th><th>DATE</th>
+            <th>PRIX</th><th>SIGNÉ</th><th>ACTIONS</th>
+          </tr>
         </thead>
         <tbody>
           ${contrats
-            .map(
-              (c) => `
+            .map((c) => {
+              const solde = ((c.prixTotal || 0) - (c.acompte || 0)).toFixed(2);
+              return `
             <tr>
               <td>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -49,17 +53,29 @@ function renderContrats() {
               <td>${c.description || "—"}</td>
               <td><span class="badge badge-blue">${c.zone || "—"}</span></td>
               <td><span class="text-mono">${formatDate(c.date)}</span></td>
+              <td>
+                ${
+                  c.prixTotal
+                    ? `
+                  <div style="font-family:var(--font-mono);font-size:12px">
+                    <div style="color:var(--ink)">${parseFloat(c.prixTotal).toFixed(2)} €</div>
+                    ${c.acompte ? `<div style="color:var(--ink-muted);font-size:10px">Solde : ${solde} €</div>` : ""}
+                  </div>
+                `
+                    : '<span style="color:var(--ink-muted)">—</span>'
+                }
+              </td>
               <td>${c.signe ? '<span class="badge badge-green">✓ SIGNÉ</span>' : '<span class="badge badge-yellow">EN ATTENTE</span>'}</td>
               <td>
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-ghost btn-sm" onclick="previewContrat(${c.id})">VOIR</button>
-                  <button class="btn btn-primary btn-sm" onclick="printContrat(${c.id})">🖨 PDF</button>
+                  <button class="btn btn-primary btn-sm" onclick="printContrat(${c.id})">⬇ PDF</button>
                   <button class="btn btn-danger btn-sm" onclick="deleteContrat(${c.id})">✕</button>
                 </div>
               </td>
             </tr>
-          `,
-            )
+          `;
+            })
             .join("")}
         </tbody>
       </table>
@@ -69,19 +85,117 @@ function renderContrats() {
   `;
 }
 
-// Récupère les numéros de lot renseignés dans les stocks pour une catégorie donnée
-function getLotsStock(categorie) {
-  return DB.getStocks()
-    .filter((s) => s.categorie === categorie && s.lot && s.lot.trim())
-    .map((s) => `${s.nom} : ${s.lot}`)
-    .join(" | ");
+// ── Helpers lots ─────────────────────────────────────────────────────────────
+
+// Retourne les stocks d'une catégorie avec au moins 1 unité disponible
+function _stocksDispos(categorie) {
+  return DB.getStocks().filter(
+    (s) => s.categorie === categorie && s.quantite > 0,
+  );
 }
+
+// Construit une ligne "produit + lot" pour le formulaire
+function _buildLotRow(prefix, index, stockItem, manualLot) {
+  const stocks = _stocksDispos(
+    stockItem === "aiguilles" ? "Aiguilles" : "Encres",
+  );
+  const selectOptions = stocks
+    .map(
+      (s) =>
+        `<option value="${s.id}" ${s.id == stockItem?.stockId ? "selected" : ""}>${s.nom}</option>`,
+    )
+    .join("");
+
+  return `
+    <div id="${prefix}-row-${index}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
+      <div class="form-group" style="flex:2;margin-bottom:0">
+        <label class="form-label">${index === 0 ? (prefix === "aig" ? "Aiguille" : "Encre") : ""}</label>
+        <select class="form-select" id="${prefix}-stock-${index}" onchange="_onLotStockChange('${prefix}',${index})">
+          <option value="">— Sélectionner dans le stock —</option>
+          ${selectOptions}
+          <option value="manuel" ${stockItem?.stockId === "manuel" ? "selected" : ""}>✎ Saisie manuelle</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label class="form-label">${index === 0 ? "N° de lot" : ""}</label>
+        <input class="form-input" id="${prefix}-lot-${index}"
+          placeholder="Lot / Ref..."
+          value="${manualLot || ""}"
+          style="font-family:var(--font-mono);font-size:12px">
+      </div>
+      <button class="btn btn-danger btn-sm" style="flex-shrink:0;margin-bottom:0"
+        onclick="_removeLotRow('${prefix}',${index})">✕</button>
+    </div>
+  `;
+}
+
+function _onLotStockChange(prefix, index) {
+  const sel = document.getElementById(`${prefix}-stock-${index}`);
+  const lotInput = document.getElementById(`${prefix}-lot-${index}`);
+  if (!sel || !lotInput) return;
+
+  if (sel.value && sel.value !== "manuel") {
+    const stock = DB.getStocks().find((s) => s.id == sel.value);
+    lotInput.value = stock?.numLot || "";
+    lotInput.placeholder = stock?.numLot ? "" : "Lot non renseigné — saisir";
+  } else {
+    lotInput.value = "";
+    lotInput.placeholder = "Lot / Ref...";
+    lotInput.focus();
+  }
+}
+
+function _removeLotRow(prefix, index) {
+  const row = document.getElementById(`${prefix}-row-${index}`);
+  if (row) row.remove();
+}
+
+function _addLotRow(prefix) {
+  const container = document.getElementById(`${prefix}-rows`);
+  if (!container) return;
+  const index = Date.now(); // index unique
+  const div = document.createElement("div");
+  div.innerHTML = _buildLotRow(prefix, index, null, "");
+  container.appendChild(div.firstElementChild);
+}
+
+// Collecte toutes les lignes lot d'un prefix
+function _collectLots(prefix) {
+  const container = document.getElementById(`${prefix}-rows`);
+  if (!container) return [];
+  const rows = container.querySelectorAll(`[id^="${prefix}-row-"]`);
+  const result = [];
+  rows.forEach((row) => {
+    const idAttr = row.id.replace(`${prefix}-row-`, "");
+    const sel = document.getElementById(`${prefix}-stock-${idAttr}`);
+    const lot = document.getElementById(`${prefix}-lot-${idAttr}`);
+    if (!sel) return;
+    const stockId = sel.value;
+    if (!stockId) return; // ligne vide ignorée
+    const stock =
+      stockId !== "manuel" ? DB.getStocks().find((s) => s.id == stockId) : null;
+    result.push({
+      stockId: stockId,
+      nomProduit: stock ? stock.nom : lot?.value?.trim() || "—",
+      numLot: lot?.value?.trim() || "",
+    });
+  });
+  return result;
+}
+
+// ── Formulaire nouveau contrat ────────────────────────────────────────────────
 
 function openNewContrat() {
   const clients = DB.getClients();
   const today = new Date().toISOString().split("T")[0];
+
+  // Lignes initiales lot
+  const initAig = _buildLotRow("aig", 0, null, "");
+  const initEnc = _buildLotRow("enc", 0, null, "");
+
   openModal(`
     <div class="modal-title">NOUVEAU CONTRAT</div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Client</label>
@@ -95,10 +209,12 @@ function openNewContrat() {
         <input class="form-input" id="ct-date" type="date" value="${today}">
       </div>
     </div>
+
     <div class="form-group">
       <label class="form-label">Description du tatouage</label>
       <input class="form-input" id="ct-desc" placeholder="Dragon avant-bras droit, mandala épaule...">
     </div>
+
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Zone corporelle</label>
@@ -109,7 +225,8 @@ function openNewContrat() {
           <option>Dos</option><option>Poitrine</option><option>Ventre</option>
           <option>Cuisse droite</option><option>Cuisse gauche</option>
           <option>Mollet droit</option><option>Mollet gauche</option>
-          <option>Cheville</option><option>Pied</option><option>Cou</option><option>Tête</option><option>Autre</option>
+          <option>Cheville</option><option>Pied</option><option>Cou</option>
+          <option>Tête</option><option>Autre</option>
         </select>
       </div>
       <div class="form-group">
@@ -120,6 +237,41 @@ function openNewContrat() {
         </select>
       </div>
     </div>
+
+    <!-- PRODUITS UTILISÉS -->
+    <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--accent);margin-bottom:14px">
+        PRODUITS UTILISÉS & N° DE LOT
+        <span style="color:var(--ink-muted);font-size:9px;margin-left:8px;letter-spacing:1px">(traçabilité réglementaire)</span>
+      </div>
+
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">AIGUILLES</div>
+      <div id="aig-rows">${initAig}</div>
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="_addLotRow('aig')">+ Ajouter une aiguille</button>
+
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">ENCRES</div>
+      <div id="enc-rows">${initEnc}</div>
+      <button class="btn btn-ghost btn-sm" onclick="_addLotRow('enc')">+ Ajouter une encre</button>
+    </div>
+
+    <!-- CONDITIONS FINANCIÈRES -->
+    <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">CONDITIONS FINANCIÈRES</div>
+      <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Prix total (€)</label>
+          <input class="form-input" id="ct-prix" type="number" step="0.01" min="0" placeholder="0.00"
+            oninput="updateSoldePreview()">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Acompte versé (€)</label>
+          <input class="form-input" id="ct-acompte" type="number" step="0.01" min="0" placeholder="0.00"
+            oninput="updateSoldePreview()">
+        </div>
+      </div>
+      <div id="solde-preview" style="margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);text-align:right"></div>
+    </div>
+
     <div class="form-group">
       <label class="form-label">Allergies (pré-remplies depuis la fiche client)</label>
       <input class="form-input" id="ct-allergies" placeholder="Aucune connue">
@@ -128,23 +280,27 @@ function openNewContrat() {
       <label class="form-label">Notes médicales</label>
       <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements..."></textarea>
     </div>
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--ink-muted);text-transform:uppercase;margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border)">Traçabilité matériel stérile</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Aiguille(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-aiguille" placeholder="Laisser vide si inconnu" value="${getLotsStock("Aiguilles")}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Encre(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-encre" placeholder="Laisser vide si inconnu" value="${getLotsStock("Encres")}">
-      </div>
-    </div>
+
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-ghost" onclick="previewNewContrat()">APERÇU</button>
       <button class="btn btn-primary" onclick="saveNewContrat()">GÉNÉRER</button>
     </div>
   `);
+}
+
+function updateSoldePreview() {
+  const total = parseFloat(document.getElementById("ct-prix")?.value) || 0;
+  const acompte = parseFloat(document.getElementById("ct-acompte")?.value) || 0;
+  const el = document.getElementById("solde-preview");
+  if (!el) return;
+  if (total > 0) {
+    const solde = total - acompte;
+    const color = solde <= 0 ? "var(--green)" : "var(--accent)";
+    el.innerHTML = `Solde à régler le jour J : <span style="color:${color};font-weight:700">${solde.toFixed(2)} €</span>`;
+  } else {
+    el.innerHTML = "";
+  }
 }
 
 function fillContratClient() {
@@ -157,6 +313,9 @@ function fillContratClient() {
 function getContratData() {
   const clientId = parseInt(document.getElementById("ct-client").value);
   const c = DB.getClient(clientId);
+  const prixTotal = parseFloat(document.getElementById("ct-prix")?.value) || 0;
+  const acompte = parseFloat(document.getElementById("ct-acompte")?.value) || 0;
+
   return {
     clientId,
     clientNom: c ? `${c.prenom} ${c.nom}` : "",
@@ -169,8 +328,10 @@ function getContratData() {
     signe: document.getElementById("ct-signe").value === "true",
     allergies: document.getElementById("ct-allergies").value.trim(),
     medical: document.getElementById("ct-medical").value.trim(),
-    lotAiguille: document.getElementById("ct-lot-aiguille")?.value.trim() || "",
-    lotEncre: document.getElementById("ct-lot-encre")?.value.trim() || "",
+    prixTotal,
+    acompte,
+    lotsAiguilles: _collectLots("aig"),
+    lotsEncres: _collectLots("enc"),
   };
 }
 
@@ -185,26 +346,79 @@ async function saveNewContrat() {
   renderContrats();
 }
 
+// ── Génération HTML du contrat ────────────────────────────────────────────────
+
+function _getStudioSettings() {
+  if (typeof _cache !== "undefined" && _cache.settings) return _cache.settings;
+  try {
+    return JSON.parse(localStorage.getItem("inkmaster_settings") || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
 function generateContratHTML(contrat) {
-  const s = DB.getSettings();
   const signLine =
     '<div style="margin-top:8px;border-bottom:1px solid #333;height:40px"></div>';
-  const logoHtml = s.logoUrl
-    ? `<img src="${s.logoUrl}" style="max-height:70px;max-width:200px;margin-bottom:8px;display:block;margin-left:auto;margin-right:auto">`
-    : "";
+  const s = _getStudioSettings();
+
+  const studioNom = s.studioNom || "Plan'Ink Studio";
+  const studioAdresse =
+    [s.studioAdresse, s.studioVille].filter(Boolean).join(" — ") ||
+    "123 Rue de l'Encre — 75000 Paris";
+  const studioTel = s.studioTel || "";
+  const studioEmail = s.studioEmail || "";
+  const studioSite = s.studioSite || "";
+  const studioSiret = s.studioSiret || "";
+  const studioMention = s.studioMention || "";
+
+  const headerLogoHtml = s.logoBase64
+    ? `<img src="${s.logoBase64}" alt="Logo studio" style="max-height:70px;max-width:220px;object-fit:contain;margin:0 auto 10px;display:block">`
+    : `<h2 style="font-size:22px;font-weight:700;letter-spacing:2px">${studioNom}</h2>`;
+
+  const prixTotal = parseFloat(contrat.prixTotal) || 0;
+  const acompte = parseFloat(contrat.acompte) || 0;
+  const solde = prixTotal - acompte;
+
+  // Section lots produits
+  const aiguilles = contrat.lotsAiguilles || [];
+  const encres = contrat.lotsEncres || [];
+  const hasLots = aiguilles.length > 0 || encres.length > 0;
+
+  function buildLotsTable(items, label) {
+    if (!items || items.length === 0) {
+      return `<tr>
+        <td style="padding:6px 10px;border:1px solid #ddd;color:#888;font-style:italic">${label} utilisé(e)</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;border-bottom:1px solid #aaa;min-width:160px">&nbsp;</td>
+      </tr>`;
+    }
+    return items
+      .map(
+        (item) => `
+      <tr>
+        <td style="padding:6px 10px;border:1px solid #ddd">${item.nomProduit || "—"}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;font-family:monospace;font-size:12px">
+          ${item.numLot || '<span style="color:#aaa;font-style:italic">—</span>'}
+        </td>
+      </tr>
+    `,
+      )
+      .join("");
+  }
+
   return `
     <div class="contrat-preview">
       <div class="studio-header">
-        ${logoHtml}
-        <h2>${s.studioNom || "Plan'Ink Studio"}</h2>
-        <div style="font-size:12px;color:#555">
-          ${s.studioAdresse ? s.studioAdresse + (s.studioVille ? " — " + s.studioVille : "") : ""}
-          ${s.studioTel ? "<br>Tél : " + s.studioTel : ""}
-          ${s.studioEmail ? " — " + s.studioEmail : ""}
-          ${s.studioSite ? "<br>" + s.studioSite : ""}
-          ${s.studioSiret ? "<br>SIRET : " + s.studioSiret : ""}
+        ${headerLogoHtml}
+        <div style="font-size:12px;color:#555;margin-top:4px">
+          ${studioAdresse}
+          ${studioTel ? `<br>Tél : ${studioTel}` : ""}
+          ${studioEmail ? ` — ${studioEmail}` : ""}
+          ${studioSite ? `<br>${studioSite}` : ""}
+          ${studioSiret ? `<br>SIRET : ${studioSiret}` : ""}
+          ${studioMention ? `<br><em>${studioMention}</em>` : ""}
         </div>
-        <h2 style="margin-top:12px;font-size:16px;letter-spacing:2px">FORMULAIRE DE CONSENTEMENT ÉCLAIRÉ</h2>
+        <h2 style="margin-top:14px;font-size:16px;letter-spacing:2px">FORMULAIRE DE CONSENTEMENT ÉCLAIRÉ</h2>
         <div style="font-size:11px;color:#777;margin-top:4px">Document légal — à conserver</div>
       </div>
 
@@ -219,7 +433,30 @@ function generateContratHTML(contrat) {
       <p><strong>Zone corporelle :</strong> ${contrat.zone || ""}</p>
       <p><strong>Date de la séance :</strong> ${contrat.date ? new Date(contrat.date).toLocaleDateString("fr-FR") : ""}</p>
 
-      <h3>3. DÉCLARATIONS MÉDICALES</h3>
+      <h3>3. PRODUITS UTILISÉS</h3>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
+        <thead>
+          <tr style="background:#f5f5f5">
+            <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px;width:60%">Produit</th>
+            <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px">N° de lot</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#fafafa">
+            <td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555">Aiguilles</td>
+          </tr>
+          ${buildLotsTable(aiguilles, "Aiguille")}
+          <tr style="background:#fafafa">
+            <td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555">Encres</td>
+          </tr>
+          ${buildLotsTable(encres, "Encre")}
+        </tbody>
+      </table>
+      <p style="font-size:11px;color:#777;margin-top:4px">
+        Ces informations sont enregistrées à des fins de traçabilité conformément à la réglementation en vigueur.
+      </p>
+
+      <h3>4. DÉCLARATIONS MÉDICALES</h3>
       <p>Je déclare ne pas être dans l'une des situations suivantes susceptibles de contre-indiquer la réalisation d'un tatouage :</p>
       <ul style="margin:8px 0 8px 20px;line-height:2">
         <li>Grossesse ou allaitement</li>
@@ -232,35 +469,6 @@ function generateContratHTML(contrat) {
       </ul>
       <p><strong>Allergies connues :</strong> ${contrat.allergies || "Aucune connue"}</p>
       ${contrat.medical ? `<p><strong>Informations médicales complémentaires :</strong> ${contrat.medical}</p>` : ""}
-
-      <h3>4. TRAÇABILITÉ DU MATÉRIEL STÉRILE</h3>
-      <p style="font-size:11px;color:#666;margin-bottom:8px">Conformément à la réglementation en vigueur, les numéros de lot du matériel à usage unique utilisé lors de cette séance sont consignés ci-dessous.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-        <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">Matériel</th>
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">Désignation</th>
-            <th style="padding:6px 10px;text-align:left;border:1px solid #ddd;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:1px">N° de lot</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Aiguille(s)</td>
-            <td style="padding:8px 10px;border:1px solid #ddd;min-width:160px">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd;min-width:140px">${contrat.lotAiguille || "&nbsp;"}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Encre(s)</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">${contrat.lotEncre || "&nbsp;"}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 10px;border:1px solid #ddd">Autre matériel</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-            <td style="padding:8px 10px;border:1px solid #ddd">&nbsp;</td>
-          </tr>
-        </tbody>
-      </table>
 
       <h3>5. CONSENTEMENT ÉCLAIRÉ</h3>
       <p>Je reconnais avoir été informé(e) des éléments suivants :</p>
@@ -286,6 +494,46 @@ function generateContratHTML(contrat) {
       <h3>7. AUTORISATION PHOTOGRAPHIQUE</h3>
       <p>J'autorise / Je n'autorise pas le studio à utiliser des photos à des fins promotionnelles (biffer la mention inutile).</p>
 
+      ${
+        prixTotal > 0
+          ? `
+      <h3>8. CONDITIONS FINANCIÈRES</h3>
+      <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:13px">
+        <thead>
+          <tr style="background:#f5f5f5">
+            <th style="padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;letter-spacing:1px;text-transform:uppercase">Désignation</th>
+            <th style="padding:8px 12px;text-align:right;border:1px solid #ddd;font-size:11px;letter-spacing:1px;text-transform:uppercase">Montant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:8px 12px;border:1px solid #ddd">Prix total de la prestation</td>
+            <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;font-weight:600">${prixTotal.toFixed(2)} €</td>
+          </tr>
+          ${
+            acompte > 0
+              ? `
+          <tr>
+            <td style="padding:8px 12px;border:1px solid #ddd;color:#555">Acompte déjà versé</td>
+            <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;color:#555">− ${acompte.toFixed(2)} €</td>
+          </tr>
+          <tr style="background:#fffbe6">
+            <td style="padding:10px 12px;border:1px solid #ddd;font-weight:700">Solde à régler le jour de la séance</td>
+            <td style="padding:10px 12px;border:1px solid #ddd;text-align:right;font-weight:700;font-size:15px">${solde.toFixed(2)} €</td>
+          </tr>
+          `
+              : ""
+          }
+        </tbody>
+      </table>
+      <p style="font-size:11px;color:#777;margin-top:6px">
+        Le paiement du solde est dû le jour de la séance, avant le début de la prestation.
+        En cas d'annulation moins de 48h avant la séance, l'acompte reste acquis au studio.
+      </p>
+      `
+          : ""
+      }
+
       <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:40px">
         <div>
           <div style="font-size:11px;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Signature du client</div>
@@ -299,11 +547,13 @@ function generateContratHTML(contrat) {
         </div>
       </div>
       <div style="margin-top:20px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:12px">
-        Document établi le ${new Date().toLocaleDateString("fr-FR")} — ${s.studioNom || "Plan'Ink Studio"}${s.studioSiret ? " — SIRET : " + s.studioSiret : ""} — Conforme RGPD
+        Document établi le ${new Date().toLocaleDateString("fr-FR")} — ${studioNom} — Conforme RGPD
       </div>
     </div>
   `;
 }
+
+// ── Preview & impression ──────────────────────────────────────────────────────
 
 function previewContrat(id) {
   const ct = DB.getContrats().find((c) => c.id === id);
@@ -313,7 +563,7 @@ function previewContrat(id) {
     ${generateContratHTML(ct)}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal()">FERMER</button>
-      <button class="btn btn-primary" onclick="printContrat(${id})">🖨 IMPRIMER / PDF</button>
+      <button class="btn btn-primary" onclick="printContrat(${id})">⬇ EXPORTER PDF</button>
     </div>
   `);
 }
@@ -330,7 +580,7 @@ function previewNewContrat() {
     ${generateContratHTML(data)}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal();openNewContrat()">← RETOUR</button>
-      <button class="btn btn-primary" onclick="printContratData(window._pendingContratData)">🖨 IMPRIMER</button>
+      <button class="btn btn-primary" onclick="printContratData(window._pendingContratData)">⬇ EXPORTER PDF</button>
     </div>
   `);
 }
@@ -342,31 +592,72 @@ function printContrat(id) {
 
 function printContratData(ct) {
   const html = generateContratHTML(ct);
-  const win = window.open("", "_blank", "width=800,height=900");
+
+  // Mode Electron : impression native
+  if (
+    typeof window.electronAPI !== "undefined" &&
+    typeof window.electronAPI.printToPDF === "function"
+  ) {
+    const filename = `contrat_${(ct.clientNom || "client").replace(/\s+/g, "_").toLowerCase()}_${ct.date || "date"}.pdf`;
+    window.electronAPI
+      .printToPDF({ html: _buildPrintHTML(html, ct), filename })
+      .catch(() => _fallbackPrint(html, ct));
+    return;
+  }
+
+  _fallbackPrint(html, ct);
+}
+
+function _buildPrintHTML(html, ct) {
+  return `<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8">
+    <title>Contrat — ${ct.clientNom || "Client"}</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+    ${_getPrintCSS()}
+  </head><body>${html}</body></html>`;
+}
+
+function _fallbackPrint(html, ct) {
+  const win = window.open("", "_blank", "width=820,height=960");
+  if (!win) {
+    alert("Autorisez les popups pour exporter le PDF.");
+    return;
+  }
   win.document.write(`<!DOCTYPE html><html lang="fr"><head>
     <meta charset="UTF-8">
     <title>Contrat — ${ct.clientNom || "Client"}</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:'DM Sans',sans-serif;font-size:13px;color:#111;background:#fff;padding:20px}
-      .contrat-preview{background:#fff;color:#111;padding:32px;max-height:none}
-      .studio-header{text-align:center;border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px}
-      h2{font-size:18px;font-weight:700}
-      h3{font-size:12px;font-weight:700;margin:14px 0 5px;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #ddd;padding-bottom:3px}
-      p,li{line-height:1.7;margin-bottom:4px}ul{margin:6px 0 6px 18px}
-      .field-line{border-bottom:1px solid #999;display:inline-block;min-width:180px}
-      @media print{button{display:none}}
-    </style>
+    ${_getPrintCSS()}
   </head><body>
     ${html}
-    <div style="text-align:center;margin-top:20px">
-      <button onclick="window.print()" style="padding:10px 24px;font-size:14px;cursor:pointer;background:#111;color:#fff;border:none;border-radius:4px">
-        🖨 Imprimer / Enregistrer en PDF
-      </button>
+    <div class="print-actions">
+      <button class="print-btn" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+      <p class="print-hint">Dans la boîte de dialogue, choisissez <strong>« Enregistrer en PDF »</strong> comme imprimante.</p>
     </div>
   </body></html>`);
   win.document.close();
+  win.addEventListener("load", () => setTimeout(() => win.print(), 400));
+}
+
+function _getPrintCSS() {
+  return `<style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'DM Sans',sans-serif; font-size:13px; color:#111; background:#fff; }
+    .contrat-preview { background:#fff; color:#111; padding:32px 40px; max-width:800px; margin:0 auto; }
+    .studio-header { text-align:center; border-bottom:2px solid #111; padding-bottom:16px; margin-bottom:20px; }
+    h2 { font-size:18px; font-weight:700; }
+    h3 { font-size:11px; font-weight:700; margin:16px 0 6px; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid #ddd; padding-bottom:4px; color:#333; }
+    p  { line-height:1.7; margin-bottom:5px; }
+    li { line-height:1.8; }
+    ul { margin:6px 0 6px 20px; }
+    table { border-collapse:collapse; }
+    .field-line { border-bottom:1px solid #999; display:inline-block; min-width:200px; }
+    .print-actions { text-align:center; padding:24px; border-top:1px solid #eee; margin-top:16px; }
+    .print-btn { padding:12px 32px; font-size:14px; font-family:'DM Sans',sans-serif; cursor:pointer; background:#111; color:#fff; border:none; border-radius:6px; }
+    .print-hint { margin-top:10px; font-size:12px; color:#777; }
+    @page { margin:12mm 14mm; size:A4; }
+    @media print { .print-actions { display:none; } body { padding:0; } .contrat-preview { padding:0; } }
+  </style>`;
 }
 
 async function deleteContrat(id) {
@@ -374,78 +665,4 @@ async function deleteContrat(id) {
     await DB.deleteContrat(id);
     renderContrats();
   }
-}
-
-// Ouvre la modale contrat pré-remplie depuis un RDV
-function openNewContratFromRdv(rdv) {
-  const clients = DB.getClients();
-  const c = DB.getClient(rdv.clientId);
-  openModal(`
-    <div class="modal-title">NOUVEAU CONTRAT</div>
-    <div style="padding:10px 12px;background:var(--accent-glow);border:1px solid var(--accent-dim);border-radius:var(--radius);margin-bottom:16px;font-size:12px;color:var(--accent);font-family:var(--font-mono)">
-      Pré-rempli depuis · ${rdv.titre} · ${formatDate(rdv.date)}
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Client</label>
-        <select class="form-select" id="ct-client" onchange="fillContratClient()">
-          <option value="">Sélectionner...</option>
-          ${clients.map((cl) => `<option value="${cl.id}" ${cl.id === rdv.clientId ? "selected" : ""}>${cl.prenom} ${cl.nom}</option>`).join("")}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" id="ct-date" type="date" value="${rdv.date}">
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Description du tatouage</label>
-      <input class="form-input" id="ct-desc" value="${rdv.titre}">
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Zone corporelle</label>
-        <select class="form-select" id="ct-zone">
-          <option>Bras droit</option><option>Bras gauche</option>
-          <option>Avant-bras droit</option><option>Avant-bras gauche</option>
-          <option>Épaule droite</option><option>Épaule gauche</option>
-          <option>Dos</option><option>Poitrine</option><option>Ventre</option>
-          <option>Cuisse droite</option><option>Cuisse gauche</option>
-          <option>Mollet droit</option><option>Mollet gauche</option>
-          <option>Cheville</option><option>Pied</option><option>Cou</option><option>Tête</option><option>Autre</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Signé ?</label>
-        <select class="form-select" id="ct-signe">
-          <option value="false">Non (à signer)</option>
-          <option value="true">Oui (signé)</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Allergies (pré-remplies depuis la fiche client)</label>
-      <input class="form-input" id="ct-allergies" value="${c ? c.allergies || "" : ""}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Notes médicales</label>
-      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements..."></textarea>
-    </div>
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--ink-muted);text-transform:uppercase;margin:16px 0 10px;padding-top:14px;border-top:1px solid var(--border)">Traçabilité matériel stérile</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Aiguille(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-aiguille" placeholder="Laisser vide si inconnu" value="${getLotsStock("Aiguilles")}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Encre(s) — N° de lot</label>
-        <input class="form-input" id="ct-lot-encre" placeholder="Laisser vide si inconnu" value="${getLotsStock("Encres")}">
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
-      <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      <button class="btn btn-ghost" onclick="previewNewContrat()">APERÇU</button>
-      <button class="btn btn-primary" onclick="saveNewContrat()">GÉNÉRER</button>
-    </div>
-  `);
 }

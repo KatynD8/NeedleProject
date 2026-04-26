@@ -44,27 +44,24 @@
             <span class="nav-icon">◪</span>
             <span>Contrats</span>
           </button>
-          <button class="nav-item" data-page="finances">
-            <span class="nav-icon">◬</span>
-            <span>Finances</span>
-          </button>
         </nav>
+
+        <!-- Paramètres séparé en bas de sidebar -->
+        <div style="padding: 0 12px 12px">
+          <button class="nav-item" data-page="settings" style="width: 100%">
+            <span class="nav-icon">⚙</span>
+            <span>Paramètres</span>
+          </button>
+        </div>
 
         <div class="sidebar-footer">
           <div class="artist-card">
-            <div class="artist-avatar">TA</div>
+            <div class="artist-avatar">TK</div>
             <div>
               <div class="artist-name">The Artist</div>
               <div class="artist-status">● En ligne</div>
             </div>
           </div>
-          <button
-            id="btn-settings"
-            class="btn btn-ghost btn-sm"
-            style="width: 100%; margin-top: 10px; justify-content: center"
-          >
-            ⚙ PARAMÈTRES
-          </button>
         </div>
       </aside>
 
@@ -75,7 +72,6 @@
         <div id="page-agenda" class="page"></div>
         <div id="page-stocks" class="page"></div>
         <div id="page-contrats" class="page"></div>
-        <div id="page-finances" class="page"></div>
         <div id="page-settings" class="page"></div>
       </main>
     </div>
@@ -95,7 +91,6 @@
     <script src="agenda.js"></script>
     <script src="stocks.js"></script>
     <script src="contrats.js"></script>
-    <script src="finances.js"></script>
     <script src="settings.js"></script>
   </body>
 </html>
