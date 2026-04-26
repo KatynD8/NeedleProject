@@ -27,6 +27,7 @@
   "build": {
     "appId": "com.katyn.planink",
     "productName": "Plan'ink",
+     "icon": "build/icon.ico",
     "directories": {
       "output": "dist"
     },
@@ -45,6 +46,7 @@
       "finances.js"
     ],
     "win": {
+       "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
