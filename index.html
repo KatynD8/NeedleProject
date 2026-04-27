@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<htm lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -44,9 +44,13 @@
             <span class="nav-icon">◪</span>
             <span>Contrats</span>
           </button>
+          <button class="nav-item" data-page="finances">
+            <span class="nav-icon">◬</span>
+            <span>Finances</span>
+          </button>
         </nav>
 
-        <!-- Paramètres séparé en bas de sidebar -->
+        <!-- Paramètres séparé en bas -->
         <div style="padding: 0 12px 12px">
           <button class="nav-item" data-page="settings" style="width: 100%">
             <span class="nav-icon">⚙</span>
@@ -72,11 +76,12 @@
         <div id="page-agenda" class="page"></div>
         <div id="page-stocks" class="page"></div>
         <div id="page-contrats" class="page"></div>
+        <div id="page-finances" class="page"></div>
         <div id="page-settings" class="page"></div>
       </main>
     </div>
 
-    <!-- Modal container -->
+    <!-- Modal -->
     <div id="modal-overlay" class="modal-overlay hidden">
       <div id="modal-box" class="modal-box">
         <button class="modal-close" onclick="closeModal()">✕</button>
@@ -91,6 +96,7 @@
     <script src="agenda.js"></script>
     <script src="stocks.js"></script>
     <script src="contrats.js"></script>
+    <script src="finances.js"></script>
     <script src="settings.js"></script>
   </body>
-</html>
+</htm

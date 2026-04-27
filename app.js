@@ -29,6 +29,9 @@ function renderPage(page) {
     case "contrats":
       renderContrats();
       break;
+    case "finances":
+      renderFinances();
+      break;
     case "settings":
       renderSettings();
       break;

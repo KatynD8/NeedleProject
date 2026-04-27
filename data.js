@@ -2,9 +2,9 @@
 // Sauvegarde dans un vrai fichier JSON sur le disque via Electron
 // Fallback sur localStorage si ouvert dans un navigateur normal
 
-const IS_ELECTRON = typeof window.electronAPI !== "undefined";
+var IS_ELECTRON = typeof window.electronAPI !== "undefined";
 
-let _cache = null;
+var _cache = null;
 
 async function loadCache() {
   if (_cache) return _cache;
@@ -16,6 +16,7 @@ async function loadCache() {
       rdvs: JSON.parse(localStorage.getItem("inkmaster_rdvs") || "[]"),
       stocks: JSON.parse(localStorage.getItem("inkmaster_stocks") || "[]"),
       contrats: JSON.parse(localStorage.getItem("inkmaster_contrats") || "[]"),
+      finances: JSON.parse(localStorage.getItem("inkmaster_finances") || "[]"),
       settings: JSON.parse(localStorage.getItem("inkmaster_settings") || "{}"),
     };
   }
@@ -23,6 +24,7 @@ async function loadCache() {
   _cache.rdvs = _cache.rdvs || [];
   _cache.stocks = _cache.stocks || [];
   _cache.contrats = _cache.contrats || [];
+  _cache.finances = _cache.finances || [];
   _cache.settings = _cache.settings || {};
   return _cache;
 }
@@ -35,8 +37,19 @@ async function persist() {
     localStorage.setItem("inkmaster_rdvs", JSON.stringify(_cache.rdvs));
     localStorage.setItem("inkmaster_stocks", JSON.stringify(_cache.stocks));
     localStorage.setItem("inkmaster_contrats", JSON.stringify(_cache.contrats));
+    localStorage.setItem("inkmaster_finances", JSON.stringify(_cache.finances));
     localStorage.setItem("inkmaster_settings", JSON.stringify(_cache.settings));
   }
+}
+
+// Helpers formatage
+function formatMoney(n) {
+  return (
+    (n || 0).toLocaleString("fr-FR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " €"
+  );
 }
 
 const DB = {
@@ -126,11 +139,53 @@ const DB = {
     await persist();
   },
 
+  // --- FINANCES ---
+  getFinances() {
+    return _cache.finances;
+  },
+
+  getFinancesMonth(year, month) {
+    return _cache.finances.filter((f) => {
+      const d = new Date(f.date);
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+  },
+
+  getTotalCA(year, month) {
+    return this.getFinancesMonth(year, month)
+      .filter((f) => f.type === "recette")
+      .reduce((sum, f) => sum + (f.montant || 0), 0);
+  },
+
+  getTotalDepenses(year, month) {
+    return this.getFinancesMonth(year, month)
+      .filter((f) => f.type === "depense")
+      .reduce((sum, f) => sum + (f.montant || 0), 0);
+  },
+
+  async addFinance(entry) {
+    entry.id = Date.now();
+    entry.createdAt = new Date().toISOString();
+    _cache.finances.push(entry);
+    await persist();
+    return entry;
+  },
+  async updateFinance(id, updates) {
+    const i = _cache.finances.findIndex((f) => f.id === id);
+    if (i !== -1) {
+      _cache.finances[i] = { ..._cache.finances[i], ...updates };
+      await persist();
+    }
+  },
+  async deleteFinance(id) {
+    _cache.finances = _cache.finances.filter((f) => f.id !== id);
+    await persist();
+  },
+
   // --- SETTINGS ---
   getSettings() {
     return _cache.settings;
   },
-  // Merge partiel : n'écrase que les clés passées (utile pour logoBase64 seul)
   async saveSettings(updates) {
     _cache.settings = { ..._cache.settings, ...updates };
     await persist();
@@ -224,6 +279,7 @@ const DB = {
         unite: "flacons",
         seuil: 5,
         prix: 12.5,
+        numLot: "",
       },
       {
         id: 3002,
@@ -233,6 +289,7 @@ const DB = {
         unite: "flacons",
         seuil: 4,
         prix: 14,
+        numLot: "",
       },
       {
         id: 3003,
@@ -242,6 +299,7 @@ const DB = {
         unite: "flacons",
         seuil: 3,
         prix: 13,
+        numLot: "",
       },
       {
         id: 3004,
@@ -251,6 +309,7 @@ const DB = {
         unite: "pièces",
         seuil: 50,
         prix: 0.8,
+        numLot: "",
       },
       {
         id: 3005,
@@ -260,6 +319,7 @@ const DB = {
         unite: "pièces",
         seuil: 30,
         prix: 1.2,
+        numLot: "",
       },
       {
         id: 3006,
@@ -301,7 +361,47 @@ const DB = {
         signe: true,
         prixTotal: 800,
         acompte: 200,
+        lotsAiguilles: [],
+        lotsEncres: [],
         createdAt: "2024-03-15T09:00:00Z",
+      },
+    ];
+
+    // Seed finances demo
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    _cache.finances = [
+      {
+        id: 5001,
+        type: "recette",
+        montant: 250,
+        description: "Séance mandala",
+        categorie: "Séance",
+        date: `${thisMonth}-05`,
+        clientId: 1002,
+        modePaiement: "CB",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 5002,
+        type: "recette",
+        montant: 180,
+        description: "Rose minimaliste",
+        categorie: "Séance",
+        date: `${thisMonth}-08`,
+        clientId: 1003,
+        modePaiement: "Espèces",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 5003,
+        type: "depense",
+        montant: 45,
+        description: "Commande encres",
+        categorie: "Encres",
+        date: `${thisMonth}-03`,
+        fournisseur: "Cheyenne",
+        modePaiement: "Virement",
+        createdAt: new Date().toISOString(),
       },
     ];
 
