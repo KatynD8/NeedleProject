@@ -1,4 +1,4 @@
-// === CONTRATS DE CONSENTEMENT — v1.1 ===
+// === CONTRATS DE CONSENTEMENT — v1.2 ===
 
 function renderContrats() {
   const contrats = DB.getContrats().sort((a, b) =>
@@ -69,6 +69,7 @@ function renderContrats() {
               <td>
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-ghost btn-sm" onclick="previewContrat(${c.id})">VOIR</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openEditContrat(${c.id})">EDIT</button>
                   <button class="btn btn-primary btn-sm" onclick="printContrat(${c.id})">⬇ PDF</button>
                   <button class="btn btn-danger btn-sm" onclick="deleteContrat(${c.id})">✕</button>
                 </div>
@@ -94,17 +95,24 @@ function _stocksDispos(categorie) {
   );
 }
 
-// Construit une ligne "produit + lot" pour le formulaire
-function _buildLotRow(prefix, index, stockItem, manualLot) {
-  const stocks = _stocksDispos(
-    stockItem === "aiguilles" ? "Aiguilles" : "Encres",
-  );
+// Construit une ligne "produit + lot" pour le formulaire.
+// prefix   : "aig" | "enc"
+// index    : identifiant unique de la ligne (0, Date.now(), …)
+// stockId  : id du stock pré-sélectionné (ou "manuel"), null si vide
+// lotValue : valeur pré-remplie du champ numLot
+function _buildLotRow(prefix, index, stockId, lotValue) {
+  // Résout la catégorie de stock selon le préfixe
+  const categorie = prefix === "aig" ? "Aiguilles" : "Encres";
+  const stocks = _stocksDispos(categorie);
+
   const selectOptions = stocks
     .map(
       (s) =>
-        `<option value="${s.id}" ${s.id == stockItem?.stockId ? "selected" : ""}>${s.nom}</option>`,
+        `<option value="${s.id}" ${s.id == stockId ? "selected" : ""}>${s.nom}</option>`,
     )
     .join("");
+
+  const isManuel = stockId === "manuel";
 
   return `
     <div id="${prefix}-row-${index}" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
@@ -113,14 +121,14 @@ function _buildLotRow(prefix, index, stockItem, manualLot) {
         <select class="form-select" id="${prefix}-stock-${index}" onchange="_onLotStockChange('${prefix}',${index})">
           <option value="">— Sélectionner dans le stock —</option>
           ${selectOptions}
-          <option value="manuel" ${stockItem?.stockId === "manuel" ? "selected" : ""}>✎ Saisie manuelle</option>
+          <option value="manuel" ${isManuel ? "selected" : ""}>✎ Saisie manuelle</option>
         </select>
       </div>
       <div class="form-group" style="flex:1;margin-bottom:0">
         <label class="form-label">${index === 0 ? "N° de lot" : ""}</label>
         <input class="form-input" id="${prefix}-lot-${index}"
           placeholder="Lot / Ref..."
-          value="${manualLot || ""}"
+          value="${lotValue || ""}"
           style="font-family:var(--font-mono);font-size:12px">
       </div>
       <button class="btn btn-danger btn-sm" style="flex-shrink:0;margin-bottom:0"
@@ -136,6 +144,7 @@ function _onLotStockChange(prefix, index) {
 
   if (sel.value && sel.value !== "manuel") {
     const stock = DB.getStocks().find((s) => s.id == sel.value);
+    // Clé canonique : numLot
     lotInput.value = stock?.numLot || "";
     lotInput.placeholder = stock?.numLot ? "" : "Lot non renseigné — saisir";
   } else {
@@ -153,7 +162,7 @@ function _removeLotRow(prefix, index) {
 function _addLotRow(prefix) {
   const container = document.getElementById(`${prefix}-rows`);
   if (!container) return;
-  const index = Date.now(); // index unique
+  const index = Date.now();
   const div = document.createElement("div");
   div.innerHTML = _buildLotRow(prefix, index, null, "");
   container.appendChild(div.firstElementChild);
@@ -175,7 +184,7 @@ function _collectLots(prefix) {
     const stock =
       stockId !== "manuel" ? DB.getStocks().find((s) => s.id == stockId) : null;
     result.push({
-      stockId: stockId,
+      stockId,
       nomProduit: stock ? stock.nom : lot?.value?.trim() || "—",
       numLot: lot?.value?.trim() || "",
     });
@@ -183,57 +192,83 @@ function _collectLots(prefix) {
   return result;
 }
 
-// ── Formulaire nouveau contrat ────────────────────────────────────────────────
+// ── Formulaire contrat — HTML partagé création / édition ─────────────────────
 
-function openNewContrat() {
+const ZONES_CORPORELLES = [
+  "Bras droit",
+  "Bras gauche",
+  "Avant-bras droit",
+  "Avant-bras gauche",
+  "Épaule droite",
+  "Épaule gauche",
+  "Dos",
+  "Poitrine",
+  "Ventre",
+  "Cuisse droite",
+  "Cuisse gauche",
+  "Mollet droit",
+  "Mollet gauche",
+  "Cheville",
+  "Pied",
+  "Cou",
+  "Tête",
+  "Autre",
+];
+
+function _buildContratForm({ title, data, onSave, onPreview }) {
   const clients = DB.getClients();
   const today = new Date().toISOString().split("T")[0];
+  const d = data || {};
 
-  // Lignes initiales lot
-  const initAig = _buildLotRow("aig", 0, null, "");
-  const initEnc = _buildLotRow("enc", 0, null, "");
+  // Reconstruit les lignes lots existantes (édition) ou une ligne vide (création)
+  const aigRows =
+    d.lotsAiguilles && d.lotsAiguilles.length > 0
+      ? d.lotsAiguilles
+          .map((l, i) => _buildLotRow("aig", i, l.stockId, l.numLot))
+          .join("")
+      : _buildLotRow("aig", 0, null, "");
 
-  openModal(`
-    <div class="modal-title">NOUVEAU CONTRAT</div>
+  const encRows =
+    d.lotsEncres && d.lotsEncres.length > 0
+      ? d.lotsEncres
+          .map((l, i) => _buildLotRow("enc", i, l.stockId, l.numLot))
+          .join("")
+      : _buildLotRow("enc", 0, null, "");
+
+  return `
+    <div class="modal-title">${title}</div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Client</label>
         <select class="form-select" id="ct-client" onchange="fillContratClient()">
           <option value="">Sélectionner...</option>
-          ${clients.map((c) => `<option value="${c.id}">${c.prenom} ${c.nom}</option>`).join("")}
+          ${clients.map((c) => `<option value="${c.id}" ${c.id === d.clientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Date</label>
-        <input class="form-input" id="ct-date" type="date" value="${today}">
+        <input class="form-input" id="ct-date" type="date" value="${d.date || today}">
       </div>
     </div>
 
     <div class="form-group">
       <label class="form-label">Description du tatouage</label>
-      <input class="form-input" id="ct-desc" placeholder="Dragon avant-bras droit, mandala épaule...">
+      <input class="form-input" id="ct-desc" placeholder="Dragon avant-bras droit, mandala épaule..." value="${d.description || ""}">
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Zone corporelle</label>
         <select class="form-select" id="ct-zone">
-          <option>Bras droit</option><option>Bras gauche</option>
-          <option>Avant-bras droit</option><option>Avant-bras gauche</option>
-          <option>Épaule droite</option><option>Épaule gauche</option>
-          <option>Dos</option><option>Poitrine</option><option>Ventre</option>
-          <option>Cuisse droite</option><option>Cuisse gauche</option>
-          <option>Mollet droit</option><option>Mollet gauche</option>
-          <option>Cheville</option><option>Pied</option><option>Cou</option>
-          <option>Tête</option><option>Autre</option>
+          ${ZONES_CORPORELLES.map((z) => `<option ${z === d.zone ? "selected" : ""}>${z}</option>`).join("")}
         </select>
       </div>
       <div class="form-group">
         <label class="form-label">Signé ?</label>
         <select class="form-select" id="ct-signe">
-          <option value="false">Non (à signer)</option>
-          <option value="true">Oui (signé)</option>
+          <option value="false" ${!d.signe ? "selected" : ""}>Non (à signer)</option>
+          <option value="true"  ${d.signe ? "selected" : ""}>Oui (signé)</option>
         </select>
       </div>
     </div>
@@ -246,11 +281,11 @@ function openNewContrat() {
       </div>
 
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">AIGUILLES</div>
-      <div id="aig-rows">${initAig}</div>
+      <div id="aig-rows">${aigRows}</div>
       <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="_addLotRow('aig')">+ Ajouter une aiguille</button>
 
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">ENCRES</div>
-      <div id="enc-rows">${initEnc}</div>
+      <div id="enc-rows">${encRows}</div>
       <button class="btn btn-ghost btn-sm" onclick="_addLotRow('enc')">+ Ajouter une encre</button>
     </div>
 
@@ -261,12 +296,12 @@ function openNewContrat() {
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Prix total (€)</label>
           <input class="form-input" id="ct-prix" type="number" step="0.01" min="0" placeholder="0.00"
-            oninput="updateSoldePreview()">
+            value="${d.prixTotal || ""}" oninput="updateSoldePreview()">
         </div>
         <div class="form-group" style="margin-bottom:0">
           <label class="form-label">Acompte versé (€)</label>
           <input class="form-input" id="ct-acompte" type="number" step="0.01" min="0" placeholder="0.00"
-            oninput="updateSoldePreview()">
+            value="${d.acompte || ""}" oninput="updateSoldePreview()">
         </div>
       </div>
       <div id="solde-preview" style="margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);text-align:right"></div>
@@ -274,19 +309,32 @@ function openNewContrat() {
 
     <div class="form-group">
       <label class="form-label">Allergies (pré-remplies depuis la fiche client)</label>
-      <input class="form-input" id="ct-allergies" placeholder="Aucune connue">
+      <input class="form-input" id="ct-allergies" placeholder="Aucune connue" value="${d.allergies || ""}">
     </div>
     <div class="form-group">
       <label class="form-label">Notes médicales</label>
-      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements..."></textarea>
+      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements...">${d.medical || ""}</textarea>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      <button class="btn btn-ghost" onclick="previewNewContrat()">APERÇU</button>
-      <button class="btn btn-primary" onclick="saveNewContrat()">GÉNÉRER</button>
+      <button class="btn btn-ghost" onclick="${onPreview}">APERÇU</button>
+      <button class="btn btn-primary" onclick="${onSave}">ENREGISTRER</button>
     </div>
-  `);
+  `;
+}
+
+// ── Formulaire nouveau contrat ────────────────────────────────────────────────
+
+function openNewContrat() {
+  openModal(
+    _buildContratForm({
+      title: "NOUVEAU CONTRAT",
+      data: null,
+      onSave: "saveNewContrat()",
+      onPreview: "previewNewContrat()",
+    }),
+  );
 }
 
 function updateSoldePreview() {
@@ -344,6 +392,58 @@ async function saveNewContrat() {
   await DB.addContrat(data);
   closeModal();
   renderContrats();
+  toast("Contrat généré ✓", "success");
+}
+
+// ── Édition d'un contrat existant ────────────────────────────────────────────
+
+function openEditContrat(id) {
+  const ct = DB.getContrats().find((c) => c.id === id);
+  if (!ct) return;
+
+  openModal(
+    _buildContratForm({
+      title: "MODIFIER CONTRAT",
+      data: ct,
+      onSave: `saveEditContrat(${id})`,
+      onPreview: `previewEditContrat(${id})`,
+    }),
+  );
+
+  // Déclenche le preview du solde si prix déjà renseigné
+  updateSoldePreview();
+}
+
+async function saveEditContrat(id) {
+  const data = getContratData();
+  if (!data.clientId || !data.description) {
+    alert("Client et description obligatoires.");
+    return;
+  }
+  await DB.updateContrat(id, data);
+  closeModal();
+  renderContrats();
+  toast("Contrat mis à jour ✓", "success");
+}
+
+function previewEditContrat(id) {
+  const liveData = getContratData();
+  if (!liveData.description) {
+    alert("Remplissez au moins la description.");
+    return;
+  }
+  // Fusionne avec l'id/createdAt existants pour que le PDF soit cohérent
+  const ct = DB.getContrats().find((c) => c.id === id);
+  const merged = { ...ct, ...liveData };
+  window._pendingContratData = merged;
+  openModal(`
+    <div class="modal-title">APERÇU CONTRAT</div>
+    ${generateContratHTML(merged)}
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost" onclick="closeModal();openEditContrat(${id})">← RETOUR</button>
+      <button class="btn btn-primary" onclick="printContratData(window._pendingContratData)">⬇ EXPORTER PDF</button>
+    </div>
+  `);
 }
 
 // ── Génération HTML du contrat ────────────────────────────────────────────────
@@ -380,10 +480,8 @@ function generateContratHTML(contrat) {
   const acompte = parseFloat(contrat.acompte) || 0;
   const solde = prixTotal - acompte;
 
-  // Section lots produits
   const aiguilles = contrat.lotsAiguilles || [];
   const encres = contrat.lotsEncres || [];
-  const hasLots = aiguilles.length > 0 || encres.length > 0;
 
   function buildLotsTable(items, label) {
     if (!items || items.length === 0) {
@@ -563,6 +661,7 @@ function previewContrat(id) {
     ${generateContratHTML(ct)}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal()">FERMER</button>
+      <button class="btn btn-ghost" onclick="closeModal();openEditContrat(${id})">EDIT</button>
       <button class="btn btn-primary" onclick="printContrat(${id})">⬇ EXPORTER PDF</button>
     </div>
   `);
@@ -593,7 +692,6 @@ function printContrat(id) {
 function printContratData(ct) {
   const html = generateContratHTML(ct);
 
-  // Mode Electron : impression native
   if (
     typeof window.electronAPI !== "undefined" &&
     typeof window.electronAPI.printToPDF === "function"
@@ -664,5 +762,24 @@ async function deleteContrat(id) {
   if (confirm("Supprimer ce contrat ?")) {
     await DB.deleteContrat(id);
     renderContrats();
+    toast("Contrat supprimé", "info");
   }
+}
+
+// ── Pré-remplissage depuis un RDV (appelé depuis agenda.js) ──────────────────
+function openNewContratFromRdv(rdv) {
+  const c = DB.getClient(rdv.clientId);
+  openModal(
+    _buildContratForm({
+      title: "NOUVEAU CONTRAT",
+      data: {
+        clientId: rdv.clientId,
+        date: rdv.date,
+        description: rdv.titre,
+        allergies: c ? c.allergies || "" : "",
+      },
+      onSave: "saveNewContrat()",
+      onPreview: "previewNewContrat()",
+    }),
+  );
 }

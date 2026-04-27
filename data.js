@@ -1,4 +1,4 @@
-// === DATA LAYER — v1.1 ===
+// === DATA LAYER — v1.2 ===
 // Sauvegarde dans un vrai fichier JSON sur le disque via Electron
 // Fallback sur localStorage si ouvert dans un navigateur normal
 
@@ -12,20 +12,30 @@ async function loadCache() {
     _cache = await window.electronAPI.loadData();
   } else {
     _cache = {
-      clients: JSON.parse(localStorage.getItem("inkmaster_clients") || "[]"),
-      rdvs: JSON.parse(localStorage.getItem("inkmaster_rdvs") || "[]"),
-      stocks: JSON.parse(localStorage.getItem("inkmaster_stocks") || "[]"),
+      clients:  JSON.parse(localStorage.getItem("inkmaster_clients")  || "[]"),
+      rdvs:     JSON.parse(localStorage.getItem("inkmaster_rdvs")     || "[]"),
+      stocks:   JSON.parse(localStorage.getItem("inkmaster_stocks")   || "[]"),
       contrats: JSON.parse(localStorage.getItem("inkmaster_contrats") || "[]"),
       finances: JSON.parse(localStorage.getItem("inkmaster_finances") || "[]"),
       settings: JSON.parse(localStorage.getItem("inkmaster_settings") || "{}"),
     };
   }
-  _cache.clients = _cache.clients || [];
-  _cache.rdvs = _cache.rdvs || [];
-  _cache.stocks = _cache.stocks || [];
+  _cache.clients  = _cache.clients  || [];
+  _cache.rdvs     = _cache.rdvs     || [];
+  _cache.stocks   = _cache.stocks   || [];
   _cache.contrats = _cache.contrats || [];
   _cache.finances = _cache.finances || [];
   _cache.settings = _cache.settings || {};
+
+  // Migration silencieuse : normalise l'ancienne clé "lot" → "numLot"
+  _cache.stocks = _cache.stocks.map((s) => {
+    if (s.lot !== undefined && s.numLot === undefined) {
+      s.numLot = s.lot;
+      delete s.lot;
+    }
+    return s;
+  });
+
   return _cache;
 }
 
@@ -33,12 +43,12 @@ async function persist() {
   if (IS_ELECTRON) {
     await window.electronAPI.saveData(_cache);
   } else {
-    localStorage.setItem("inkmaster_clients", JSON.stringify(_cache.clients));
-    localStorage.setItem("inkmaster_rdvs", JSON.stringify(_cache.rdvs));
-    localStorage.setItem("inkmaster_stocks", JSON.stringify(_cache.stocks));
-    localStorage.setItem("inkmaster_contrats", JSON.stringify(_cache.contrats));
-    localStorage.setItem("inkmaster_finances", JSON.stringify(_cache.finances));
-    localStorage.setItem("inkmaster_settings", JSON.stringify(_cache.settings));
+    localStorage.setItem("inkmaster_clients",  JSON.stringify(_cache.clients));
+    localStorage.setItem("inkmaster_rdvs",      JSON.stringify(_cache.rdvs));
+    localStorage.setItem("inkmaster_stocks",    JSON.stringify(_cache.stocks));
+    localStorage.setItem("inkmaster_contrats",  JSON.stringify(_cache.contrats));
+    localStorage.setItem("inkmaster_finances",  JSON.stringify(_cache.finances));
+    localStorage.setItem("inkmaster_settings",  JSON.stringify(_cache.settings));
   }
 }
 
@@ -134,6 +144,18 @@ const DB = {
     await persist();
     return contrat;
   },
+  async updateContrat(id, updates) {
+    const i = _cache.contrats.findIndex((c) => c.id === id);
+    if (i !== -1) {
+      // updatedAt permet de tracer la dernière modification
+      _cache.contrats[i] = {
+        ..._cache.contrats[i],
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      await persist();
+    }
+  },
   async deleteContrat(id) {
     _cache.contrats = _cache.contrats.filter((c) => c.id !== id);
     await persist();
@@ -192,8 +214,10 @@ const DB = {
   },
 
   // --- SEED DEMO DATA ---
+  // Guard sur le flag _seeded pour éviter le re-seed si l'utilisateur
+  // supprime tous ses clients, et pour permettre un reset propre.
   async seed() {
-    if (_cache.clients.length > 0) return;
+    if (_cache.settings._seeded) return;
 
     _cache.clients = [
       {
@@ -231,11 +255,9 @@ const DB = {
       },
     ];
 
-    const today = new Date().toISOString().split("T")[0];
-    const tomorrow = new Date(Date.now() + 86400000)
-      .toISOString()
-      .split("T")[0];
-    const j2 = new Date(Date.now() + 172800000).toISOString().split("T")[0];
+    const today    = new Date().toISOString().split("T")[0];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    const j2       = new Date(Date.now() + 172800000).toISOString().split("T")[0];
 
     _cache.rdvs = [
       {
@@ -270,84 +292,16 @@ const DB = {
       },
     ];
 
+    // Clé canonique : numLot partout
     _cache.stocks = [
-      {
-        id: 3001,
-        categorie: "Encres",
-        nom: "Encre Noire Intenze",
-        quantite: 8,
-        unite: "flacons",
-        seuil: 5,
-        prix: 12.5,
-        numLot: "",
-      },
-      {
-        id: 3002,
-        categorie: "Encres",
-        nom: "Encre Rouge Dynamic",
-        quantite: 3,
-        unite: "flacons",
-        seuil: 4,
-        prix: 14,
-        numLot: "",
-      },
-      {
-        id: 3003,
-        categorie: "Encres",
-        nom: "Encre Bleue Eternal",
-        quantite: 6,
-        unite: "flacons",
-        seuil: 3,
-        prix: 13,
-        numLot: "",
-      },
-      {
-        id: 3004,
-        categorie: "Aiguilles",
-        nom: "Aiguilles RL #12",
-        quantite: 150,
-        unite: "pièces",
-        seuil: 50,
-        prix: 0.8,
-        numLot: "",
-      },
-      {
-        id: 3005,
-        categorie: "Aiguilles",
-        nom: "Aiguilles Magnum Courbe",
-        quantite: 40,
-        unite: "pièces",
-        seuil: 30,
-        prix: 1.2,
-        numLot: "",
-      },
-      {
-        id: 3006,
-        categorie: "Hygiène",
-        nom: "Gants Nitrile M",
-        quantite: 2,
-        unite: "boîtes",
-        seuil: 3,
-        prix: 8,
-      },
-      {
-        id: 3007,
-        categorie: "Hygiène",
-        nom: "Film plastique",
-        quantite: 5,
-        unite: "rouleaux",
-        seuil: 2,
-        prix: 6,
-      },
-      {
-        id: 3008,
-        categorie: "Soins",
-        nom: "Baume Tattoo Care",
-        quantite: 12,
-        unite: "tubes",
-        seuil: 5,
-        prix: 9.5,
-      },
+      { id: 3001, categorie: "Encres",    nom: "Encre Noire Intenze",      quantite: 8,   unite: "flacons", seuil: 5,  prix: 12.5, numLot: "" },
+      { id: 3002, categorie: "Encres",    nom: "Encre Rouge Dynamic",      quantite: 3,   unite: "flacons", seuil: 4,  prix: 14,   numLot: "" },
+      { id: 3003, categorie: "Encres",    nom: "Encre Bleue Eternal",      quantite: 6,   unite: "flacons", seuil: 3,  prix: 13,   numLot: "" },
+      { id: 3004, categorie: "Aiguilles", nom: "Aiguilles RL #12",         quantite: 150, unite: "pièces",  seuil: 50, prix: 0.8,  numLot: "" },
+      { id: 3005, categorie: "Aiguilles", nom: "Aiguilles Magnum Courbe",  quantite: 40,  unite: "pièces",  seuil: 30, prix: 1.2,  numLot: "" },
+      { id: 3006, categorie: "Hygiène",   nom: "Gants Nitrile M",          quantite: 2,   unite: "boîtes",  seuil: 3,  prix: 8,    numLot: "" },
+      { id: 3007, categorie: "Hygiène",   nom: "Film plastique",           quantite: 5,   unite: "rouleaux",seuil: 2,  prix: 6,    numLot: "" },
+      { id: 3008, categorie: "Soins",     nom: "Baume Tattoo Care",        quantite: 12,  unite: "tubes",   seuil: 5,  prix: 9.5,  numLot: "" },
     ];
 
     _cache.contrats = [
@@ -367,7 +321,6 @@ const DB = {
       },
     ];
 
-    // Seed finances demo
     const thisMonth = new Date().toISOString().slice(0, 7);
     _cache.finances = [
       {
@@ -404,6 +357,9 @@ const DB = {
         createdAt: new Date().toISOString(),
       },
     ];
+
+    // Marquer le seed comme effectué — ne se relance plus jamais
+    _cache.settings._seeded = true;
 
     await persist();
   },

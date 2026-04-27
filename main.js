@@ -2,13 +2,37 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
-// Données dans AppData\Roaming\InkMaster — stable, jamais effacé
+// Données dans AppData/Roaming/<appName>/data — stable, jamais effacé
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const DATA_PATH = path.join(DATA_DIR, "inkmaster-data.json");
+const DATA_TMP  = DATA_PATH + ".tmp";
 
 // Créer le dossier si inexistant
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// ── Backup rotatif : conserve les 3 derniers .bak ──────────────────────────
+function rotateBackup() {
+  if (!fs.existsSync(DATA_PATH)) return;
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const bakPath = path.join(DATA_DIR, `inkmaster-data.${stamp}.bak`);
+  try {
+    // Ne crée qu'un seul backup par jour (écrase si même date)
+    fs.copyFileSync(DATA_PATH, bakPath);
+
+    // Purge : ne garde que les 3 fichiers .bak les plus récents
+    const baks = fs
+      .readdirSync(DATA_DIR)
+      .filter((f) => f.endsWith(".bak"))
+      .sort() // tri lexicographique = tri chronologique grâce au format ISO
+      .reverse();
+    baks.slice(3).forEach((f) => {
+      try { fs.unlinkSync(path.join(DATA_DIR, f)); } catch (_) {}
+    });
+  } catch (e) {
+    console.warn("Backup échoué (non bloquant) :", e.message);
+  }
 }
 
 function createWindow() {
@@ -17,7 +41,7 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    title: "Plan'ink Studio",
+    title: "Plan'Ink Studio",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -39,12 +63,22 @@ ipcMain.handle("load-data", () => {
   }
 });
 
+// ── Écriture atomique : tmp → rename ──────────────────────────────────────
+// fs.renameSync est atomique sur le même volume (POSIX + NTFS).
+// Si le process crashe pendant writeFileSync(tmp), le fichier principal
+// reste intact. Le rename ne se produit qu'une fois les données entièrement
+// écrites et flushées sur le disque.
 ipcMain.handle("save-data", (_, data) => {
   try {
-    fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), "utf-8");
+    rotateBackup();
+    const json = JSON.stringify(data, null, 2);
+    fs.writeFileSync(DATA_TMP, json, "utf-8");
+    fs.renameSync(DATA_TMP, DATA_PATH);
     return true;
   } catch (e) {
     console.error("Erreur écriture:", e);
+    // Nettoyage du .tmp orphelin si rename a échoué
+    try { if (fs.existsSync(DATA_TMP)) fs.unlinkSync(DATA_TMP); } catch (_) {}
     return false;
   }
 });

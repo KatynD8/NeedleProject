@@ -98,7 +98,7 @@ function renderStocks() {
                     </td>
                     <td><span class="text-mono text-muted">${s.seuil} ${s.unite}</span></td>
                     <td><span class="badge ${badge}">${label}</span></td>
-                    <td><span class="text-mono" style="font-size:10px;color:var(--ink-muted)">${s.lot || "—"}</span></td>
+                    <td><span class="text-mono" style="font-size:10px;color:var(--ink-muted)">${s.numLot || "—"}</span></td>
                     <td><span class="text-mono">${s.prix ? s.prix.toFixed(2) + " €" : "—"}</span></td>
                     <td><span class="text-mono text-accent">${s.prix ? (s.quantite * s.prix).toFixed(2) + " €" : "—"}</span></td>
                     <td>
@@ -157,7 +157,7 @@ function openAddStock() {
     </div>
     <div class="form-group">
       <label class="form-label">N° de lot (traçabilité)</label>
-      <input class="form-input" id="s-lot" placeholder="Ex: LOT-2024-08-A">
+      <input class="form-input" id="s-numlot" placeholder="Ex: LOT-2024-08-A">
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
@@ -179,7 +179,7 @@ async function saveNewStock() {
     unite: document.getElementById("s-unite").value.trim() || "unités",
     seuil: parseFloat(document.getElementById("s-seuil").value) || 0,
     prix: parseFloat(document.getElementById("s-prix").value) || 0,
-    lot: document.getElementById("s-lot").value.trim(),
+    numLot: document.getElementById("s-numlot").value.trim(), // ← clé canonique
   });
   closeModal();
   renderStocks();
@@ -257,7 +257,7 @@ function openEditStock(id) {
     </div>
     <div class="form-group">
       <label class="form-label">N° de lot (traçabilité)</label>
-      <input class="form-input" id="es-lot" value="${s.lot || ""}" placeholder="Ex: LOT-2024-08-A">
+      <input class="form-input" id="es-numlot" value="${s.numLot || ""}" placeholder="Ex: LOT-2024-08-A">
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
@@ -274,7 +274,7 @@ async function saveEditStock(id) {
     unite: document.getElementById("es-unite").value.trim(),
     seuil: parseFloat(document.getElementById("es-seuil").value) || 0,
     prix: parseFloat(document.getElementById("es-prix").value) || 0,
-    lot: document.getElementById("es-lot").value.trim(),
+    numLot: document.getElementById("es-numlot").value.trim(), // ← clé canonique
   });
   closeModal();
   renderStocks();
