@@ -1,4 +1,4 @@
-// === CLIENTS ===
+// === CLIENTS — v1.2 ===
 let clientsSearch = "";
 
 function renderClients() {
@@ -21,6 +21,7 @@ function renderClients() {
           <input type="text" placeholder="Rechercher..." id="client-search" value="${clientsSearch}"
             oninput="clientsSearch=this.value;renderClients()">
         </div>
+        <button class="btn btn-ghost" onclick="exportClientsCSV()">⬇ CSV</button>
         <button class="btn btn-primary" onclick="openAddClient()">+ NOUVEAU CLIENT</button>
       </div>
     </div>
@@ -53,8 +54,9 @@ function renderClients() {
               const rdvCount = DB.getRdvs().filter(
                 (r) => r.clientId === c.id,
               ).length;
+              const isAnon = !!c._anonymized;
               return `
-            <tr>
+            <tr style="${isAnon ? "opacity:0.55" : ""}">
               <td>
                 <div style="display:flex;align-items:center;gap:10px">
                   <div style="width:34px;height:34px;border-radius:50%;background:var(--accent-glow);border:1px solid var(--accent-dim);
@@ -62,7 +64,7 @@ function renderClients() {
                     ${initials(c.nom, c.prenom)}
                   </div>
                   <div>
-                    <div style="font-weight:500">${c.prenom} ${c.nom}</div>
+                    <div style="font-weight:500">${c.prenom} ${c.nom}${isAnon ? ' <span style="font-family:var(--font-mono);font-size:9px;color:var(--ink-muted)">[ANONYMISÉ]</span>' : ""}</div>
                     ${c.notes ? `<div style="font-size:11px;color:var(--ink-muted)">${c.notes.substring(0, 40)}${c.notes.length > 40 ? "…" : ""}</div>` : ""}
                   </div>
                 </div>
@@ -78,8 +80,8 @@ function renderClients() {
               <td>
                 <div style="display:flex;gap:6px">
                   <button class="btn btn-ghost btn-sm" onclick="openClientDetail(${c.id})">VOIR</button>
-                  <button class="btn btn-ghost btn-sm" onclick="openEditClient(${c.id})">EDIT</button>
-                  <button class="btn btn-danger btn-sm" onclick="deleteClient(${c.id})">✕</button>
+                  ${!isAnon ? `<button class="btn btn-ghost btn-sm" onclick="openEditClient(${c.id})">EDIT</button>` : ""}
+                  <button class="btn btn-danger btn-sm" onclick="openDeleteClient(${c.id})">✕</button>
                 </div>
               </td>
             </tr>
@@ -93,6 +95,8 @@ function renderClients() {
     }
   `;
 }
+
+// ── Ajout client ──────────────────────────────────────────────────────────────
 
 function openAddClient() {
   openModal(`
@@ -156,7 +160,10 @@ async function saveNewClient() {
   });
   closeModal();
   renderClients();
+  toast("Client ajouté ✓", "success");
 }
+
+// ── Édition client ────────────────────────────────────────────────────────────
 
 function openEditClient(id) {
   const c = DB.getClient(id);
@@ -216,30 +223,85 @@ async function saveEditClient(id) {
   });
   closeModal();
   renderClients();
+  toast("Client mis à jour ✓", "success");
 }
 
-async function deleteClient(id) {
+// ── Suppression client — modale 2 étapes avec cascade / anonymisation ─────────
+
+function openDeleteClient(id) {
   const c = DB.getClient(id);
   if (!c) return;
+  const linked = DB.getClientLinkedData(id);
+  const hasLinked =
+    linked.rdvs > 0 || linked.contrats > 0 || linked.finances > 0;
+
+  const linkedSummary = hasLinked
+    ? `
+      <div style="margin:12px 0;padding:10px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
+        <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--ink-muted);margin-bottom:8px">DONNÉES LIÉES</div>
+        <div style="display:flex;gap:16px">
+          ${linked.rdvs > 0 ? `<span style="color:var(--ink)">${linked.rdvs} RDV</span>` : ""}
+          ${linked.contrats > 0 ? `<span style="color:var(--ink)">${linked.contrats} contrat${linked.contrats > 1 ? "s" : ""}</span>` : ""}
+          ${linked.finances > 0 ? `<span style="color:var(--accent)">${linked.finances} entrée${linked.finances > 1 ? "s" : ""} finances</span>` : ""}
+        </div>
+      </div>
+    `
+    : "";
+
   openModal(`
     <div class="modal-title">SUPPRIMER CLIENT</div>
-    <div style="margin-bottom:20px;font-size:13px;color:var(--ink-muted)">
-      Supprimer <strong style="color:var(--ink)">${c.prenom} ${c.nom}</strong> ?<br>
-      <span style="font-size:11px">Cette action est irréversible.</span>
+    <div style="font-size:13px;color:var(--ink-muted);margin-bottom:4px">
+      Que faire de <strong style="color:var(--ink)">${c.prenom} ${c.nom}</strong> ?
     </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+    ${linkedSummary}
+
+    ${
+      hasLinked
+        ? `
+    <div style="padding:12px 14px;background:rgba(200,169,110,0.08);border:1px solid var(--accent-dim);border-radius:var(--radius);font-size:12px;color:var(--ink-muted);margin-bottom:16px">
+      <strong style="color:var(--accent);font-family:var(--font-mono);font-size:10px">ANONYMISATION RECOMMANDÉE</strong><br>
+      Efface toutes les informations personnelles tout en conservant l'historique financier pour vos déclarations. Conforme RGPD.
+    </div>
+    `
+        : ""
+    }
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      <button class="btn btn-danger" onclick="confirmDeleteClient(${id})">SUPPRIMER</button>
+      ${
+        hasLinked
+          ? `
+        <button class="btn btn-ghost" style="border-color:var(--accent-dim);color:var(--accent)"
+          onclick="confirmAnonymizeClient(${id})">◌ ANONYMISER</button>
+      `
+          : ""
+      }
+      <button class="btn btn-danger" onclick="confirmDeleteClientCascade(${id})">
+        ${hasLinked ? "✕ SUPPRIMER TOUT" : "✕ SUPPRIMER"}
+      </button>
     </div>
   `);
 }
 
-async function confirmDeleteClient(id) {
+async function confirmAnonymizeClient(id) {
   closeModal();
-  await DB.deleteClient(id);
-  // Petit délai pour laisser le DOM se stabiliser après fermeture de la modal
+  await DB.anonymizeClient(id);
   setTimeout(() => renderClients(), 50);
+  toast("Client anonymisé (RGPD) ✓", "info");
 }
+
+async function confirmDeleteClientCascade(id) {
+  closeModal();
+  await DB.deleteClientCascade(id);
+  setTimeout(() => {
+    renderClients();
+    // Rafraîchit le dashboard si visible
+    if (typeof renderDashboard === "function") renderDashboard();
+  }, 50);
+  toast("Client et données liées supprimés", "info");
+}
+
+// ── Fiche client détaillée ────────────────────────────────────────────────────
 
 function openClientDetail(id) {
   const c = DB.getClient(id);
@@ -291,4 +353,77 @@ function openClientDetail(id) {
       <button class="btn btn-primary" onclick="closeModal();openAddRdvForClient(${id})">+ RDV</button>
     </div>
   `);
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+
+function exportClientsCSV() {
+  const clients = DB.getClients();
+  if (clients.length === 0) {
+    toast("Aucun client à exporter", "info");
+    return;
+  }
+
+  // En-tête CSV
+  const headers = [
+    "Prénom",
+    "Nom",
+    "Email",
+    "Téléphone",
+    "Date de naissance",
+    "Allergies",
+    "Notes",
+    "Ajouté le",
+    "Nb RDV",
+  ];
+
+  const escape = (val) => {
+    const s = String(val ?? "").replace(/"/g, '""');
+    return `"${s}"`;
+  };
+
+  const rows = clients.map((c) => {
+    const rdvCount = DB.getRdvs().filter((r) => r.clientId === c.id).length;
+    return [
+      c.prenom || "",
+      c.nom || "",
+      c.email || "",
+      c.tel || "",
+      c.dateNaissance
+        ? new Date(c.dateNaissance).toLocaleDateString("fr-FR")
+        : "",
+      c.allergies || "",
+      c.notes || "",
+      c.createdAt ? new Date(c.createdAt).toLocaleDateString("fr-FR") : "",
+      rdvCount,
+    ]
+      .map(escape)
+      .join(";");
+  });
+
+  const csvContent =
+    "\uFEFF" + [headers.map(escape).join(";"), ...rows].join("\r\n");
+  // BOM \uFEFF pour que Excel ouvre le fichier en UTF-8 sans encodage cassé
+
+  // Mode Electron : boîte de dialogue Enregistrer sous
+  if (
+    typeof window.electronAPI !== "undefined" &&
+    typeof window.electronAPI.saveCSV === "function"
+  ) {
+    const filename = `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`;
+    window.electronAPI.saveCSV({ content: csvContent, filename });
+    return;
+  }
+
+  // Fallback navigateur : download via <a>
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("Export CSV téléchargé ✓", "success");
 }

@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
 // Données dans AppData/Roaming/<appName>/data — stable, jamais effacé
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const DATA_PATH = path.join(DATA_DIR, "inkmaster-data.json");
-const DATA_TMP  = DATA_PATH + ".tmp";
+const DATA_TMP = DATA_PATH + ".tmp";
 
 // Créer le dossier si inexistant
 if (!fs.existsSync(DATA_DIR)) {
@@ -28,7 +28,9 @@ function rotateBackup() {
       .sort() // tri lexicographique = tri chronologique grâce au format ISO
       .reverse();
     baks.slice(3).forEach((f) => {
-      try { fs.unlinkSync(path.join(DATA_DIR, f)); } catch (_) {}
+      try {
+        fs.unlinkSync(path.join(DATA_DIR, f));
+      } catch (_) {}
     });
   } catch (e) {
     console.warn("Backup échoué (non bloquant) :", e.message);
@@ -78,12 +80,30 @@ ipcMain.handle("save-data", (_, data) => {
   } catch (e) {
     console.error("Erreur écriture:", e);
     // Nettoyage du .tmp orphelin si rename a échoué
-    try { if (fs.existsSync(DATA_TMP)) fs.unlinkSync(DATA_TMP); } catch (_) {}
+    try {
+      if (fs.existsSync(DATA_TMP)) fs.unlinkSync(DATA_TMP);
+    } catch (_) {}
     return false;
   }
 });
 
 ipcMain.handle("get-data-path", () => DATA_PATH);
+
+// ── Export CSV avec boîte "Enregistrer sous" ──────────────────────────────
+ipcMain.handle("save-csv", async (_, { content, filename }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath: filename,
+    filters: [{ name: "CSV", extensions: ["csv"] }],
+  });
+  if (canceled || !filePath) return false;
+  try {
+    fs.writeFileSync(filePath, content, "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Erreur export CSV:", e);
+    return false;
+  }
+});
 
 app.whenReady().then(createWindow);
 

@@ -1,4 +1,4 @@
-// === FINANCES ===
+// === FINANCES — v1.1 ===
 let finTab = "transactions"; // 'transactions' | 'stats'
 let finYear = new Date().getFullYear();
 let finMonth = new Date().getMonth();
@@ -163,11 +163,19 @@ function renderFinancesStats() {
   const bestMonth = [...monthly].sort((a, b) => b.ca - a.ca)[0];
   const maxVal = Math.max(...monthly.map((m) => Math.max(m.ca, m.dep)), 1);
 
-  const rdvs = DB.getRdvs().filter(
-    (r) => r.statut === "termine" && r.tarif > 0,
-  );
-  const avgTarif =
-    rdvs.length > 0 ? rdvs.reduce((s, r) => s + r.tarif, 0) / rdvs.length : 0;
+  // ── Correctif tarif moyen ───────────────────────────────────────────────────
+  // Ancienne version : filtrait sur rdv.tarif souvent absent ou non renseigné.
+  // Nouvelle version : moyenne des recettes catégorie "Séance" de l'année,
+  // alimentée de façon fiable par saveFinanceFromRdv().
+  const avgTarif = DB.getAvgTarifSeance(year);
+  const nbSeances = DB.getFinances().filter((f) => {
+    const d = new Date(f.date);
+    return (
+      d.getFullYear() === year &&
+      f.type === "recette" &&
+      f.categorie === "Séance"
+    );
+  }).length;
 
   document.getElementById("page-finances").innerHTML = `
     <div class="page-header">
@@ -203,7 +211,8 @@ function renderFinancesStats() {
       </div>
       <div class="stat-card">
         <div class="stat-label">Tarif moyen / séance</div>
-        <div class="stat-value" style="font-size:22px;color:var(--accent)">${formatMoney(avgTarif)}</div>
+        <div class="stat-value" style="font-size:22px;color:var(--accent)">${avgTarif > 0 ? formatMoney(avgTarif) : "—"}</div>
+        <div class="stat-sub">${nbSeances > 0 ? `sur ${nbSeances} séance${nbSeances > 1 ? "s" : ""}` : "aucune séance enregistrée"}</div>
       </div>
     </div>
 
@@ -334,7 +343,6 @@ async function saveFinanceFromRdv(rdvId) {
     modePaiement: document.getElementById("f-mode").value,
     rdvId,
   });
-  // Sauvegarder le tarif sur le RDV pour les stats
   await DB.updateRdv(rdvId, { tarif: montant });
 
   closeModal();
