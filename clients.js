@@ -1,12 +1,64 @@
-// === CLIENTS — v1.2 ===
+// === CLIENTS — v1.3 ===
 let clientsSearch = "";
+let clientsSort = { col: "nom", dir: "asc" };
+
+// ── Tri colonnes ──────────────────────────────────────────────────────────────
+// Clic sur un th → bascule asc/desc ou change de colonne.
+function setClientsSort(col) {
+  if (clientsSort.col === col) {
+    clientsSort.dir = clientsSort.dir === "asc" ? "desc" : "asc";
+  } else {
+    clientsSort.col = col;
+    clientsSort.dir = "asc";
+  }
+  renderClients();
+}
+
+function _sortClients(arr) {
+  const { col, dir } = clientsSort;
+  const mult = dir === "asc" ? 1 : -1;
+  return [...arr].sort((a, b) => {
+    let va, vb;
+    switch (col) {
+      case "nom":
+        va = `${a.nom} ${a.prenom}`.toLowerCase();
+        vb = `${b.nom} ${b.prenom}`.toLowerCase();
+        break;
+      case "createdAt":
+        va = a.createdAt || "";
+        vb = b.createdAt || "";
+        break;
+      case "rdvs":
+        va = DB.getRdvs().filter((r) => r.clientId === a.id).length;
+        vb = DB.getRdvs().filter((r) => r.clientId === b.id).length;
+        break;
+      default:
+        va = "";
+        vb = "";
+    }
+    if (va < vb) return -1 * mult;
+    if (va > vb) return 1 * mult;
+    return 0;
+  });
+}
+
+function _thSort(label, col) {
+  const active = clientsSort.col === col;
+  const arrow = active ? (clientsSort.dir === "asc" ? " ↑" : " ↓") : "";
+  return `<th style="cursor:pointer;user-select:none${active ? ";color:var(--accent)" : ""}"
+    onclick="setClientsSort('${col}')">${label}${arrow}</th>`;
+}
+
+// ── Rendu ─────────────────────────────────────────────────────────────────────
 
 function renderClients() {
   const all = DB.getClients();
-  const filtered = all.filter((c) =>
-    `${c.prenom} ${c.nom} ${c.email}`
-      .toLowerCase()
-      .includes(clientsSearch.toLowerCase()),
+  const filtered = _sortClients(
+    all.filter((c) =>
+      `${c.prenom} ${c.nom} ${c.email}`
+        .toLowerCase()
+        .includes(clientsSearch.toLowerCase()),
+    ),
   );
 
   document.getElementById("page-clients").innerHTML = `
@@ -18,7 +70,7 @@ function renderClients() {
       <div style="display:flex;gap:10px;align-items:center">
         <div class="search-bar">
           <span class="search-icon">⌕</span>
-          <input type="text" placeholder="Rechercher..." id="client-search" value="${clientsSearch}"
+          <input type="text" placeholder="Rechercher..." id="client-search" value="${escapeHTML(clientsSearch)}"
             oninput="clientsSearch=this.value;renderClients()">
         </div>
         <button class="btn btn-ghost" onclick="exportClientsCSV()">⬇ CSV</button>
@@ -28,23 +80,18 @@ function renderClients() {
 
     ${
       filtered.length === 0
-        ? `
-      <div class="empty-state">
-        <div class="empty-icon">◉</div>
-        <div class="empty-text">AUCUN CLIENT TROUVÉ</div>
-      </div>
-    `
+        ? `<div class="empty-state"><div class="empty-icon">◉</div><div class="empty-text">AUCUN CLIENT TROUVÉ</div></div>`
         : `
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>CLIENT</th>
+            ${_thSort("CLIENT", "nom")}
             <th>CONTACT</th>
             <th>DATE DE NAISSANCE</th>
             <th>ALLERGIES</th>
-            <th>RDV</th>
-            <th>AJOUTÉ LE</th>
+            ${_thSort("RDV", "rdvs")}
+            ${_thSort("AJOUTÉ LE", "createdAt")}
             <th>ACTIONS</th>
           </tr>
         </thead>
@@ -64,17 +111,17 @@ function renderClients() {
                     ${initials(c.nom, c.prenom)}
                   </div>
                   <div>
-                    <div style="font-weight:500">${c.prenom} ${c.nom}${isAnon ? ' <span style="font-family:var(--font-mono);font-size:9px;color:var(--ink-muted)">[ANONYMISÉ]</span>' : ""}</div>
-                    ${c.notes ? `<div style="font-size:11px;color:var(--ink-muted)">${c.notes.substring(0, 40)}${c.notes.length > 40 ? "…" : ""}</div>` : ""}
+                    <div style="font-weight:500">${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}${isAnon ? ' <span style="font-family:var(--font-mono);font-size:9px;color:var(--ink-muted)">[ANONYMISÉ]</span>' : ""}</div>
+                    ${c.notes ? `<div style="font-size:11px;color:var(--ink-muted)">${escapeHTML(c.notes.substring(0, 40))}${c.notes.length > 40 ? "…" : ""}</div>` : ""}
                   </div>
                 </div>
               </td>
               <td>
-                <div style="font-size:12px">${c.email || "—"}</div>
-                <div style="font-size:12px;color:var(--ink-muted)">${c.tel || "—"}</div>
+                <div style="font-size:12px">${escapeHTML(c.email) || "—"}</div>
+                <div style="font-size:12px;color:var(--ink-muted)">${escapeHTML(c.tel) || "—"}</div>
               </td>
               <td><span class="text-mono">${c.dateNaissance ? formatDate(c.dateNaissance) : "—"}</span></td>
-              <td>${c.allergies ? `<span class="badge badge-red">${c.allergies}</span>` : '<span style="color:var(--ink-muted)">—</span>'}</td>
+              <td>${c.allergies ? `<span class="badge badge-red">${escapeHTML(c.allergies)}</span>` : '<span style="color:var(--ink-muted)">—</span>'}</td>
               <td><span class="badge badge-gold">${rdvCount} RDV</span></td>
               <td><span class="text-mono text-muted">${formatDate(c.createdAt)}</span></td>
               <td>
@@ -90,8 +137,7 @@ function renderClients() {
             .join("")}
         </tbody>
       </table>
-    </div>
-    `
+    </div>`
     }
   `;
 }
@@ -102,39 +148,18 @@ function openAddClient() {
   openModal(`
     <div class="modal-title">NOUVEAU CLIENT</div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Prénom</label>
-        <input class="form-input" id="c-prenom" placeholder="Jean">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nom</label>
-        <input class="form-input" id="c-nom" placeholder="Dupont">
-      </div>
+      <div class="form-group"><label class="form-label">Prénom</label><input class="form-input" id="c-prenom" placeholder="Jean"></div>
+      <div class="form-group"><label class="form-label">Nom</label><input class="form-input" id="c-nom" placeholder="Dupont"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input class="form-input" id="c-email" type="email" placeholder="jean@email.fr">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Téléphone</label>
-        <input class="form-input" id="c-tel" placeholder="06 00 00 00 00">
-      </div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="c-email" type="email" placeholder="jean@email.fr"></div>
+      <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="c-tel" placeholder="06 00 00 00 00"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Date de naissance</label>
-        <input class="form-input" id="c-dob" type="date">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Allergies connues</label>
-        <input class="form-input" id="c-allergies" placeholder="Latex, Nickel...">
-      </div>
+      <div class="form-group"><label class="form-label">Date de naissance</label><input class="form-input" id="c-dob" type="date"></div>
+      <div class="form-group"><label class="form-label">Allergies connues</label><input class="form-input" id="c-allergies" placeholder="Latex, Nickel..."></div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="c-notes" placeholder="Style préféré, remarques..."></textarea>
-    </div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="c-notes" placeholder="Style préféré, remarques..."></textarea></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-primary" onclick="saveNewClient()">ENREGISTRER</button>
@@ -171,39 +196,18 @@ function openEditClient(id) {
   openModal(`
     <div class="modal-title">MODIFIER CLIENT</div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Prénom</label>
-        <input class="form-input" id="ec-prenom" value="${c.prenom || ""}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nom</label>
-        <input class="form-input" id="ec-nom" value="${c.nom || ""}">
-      </div>
+      <div class="form-group"><label class="form-label">Prénom</label><input class="form-input" id="ec-prenom" value="${escapeHTML(c.prenom || "")}"></div>
+      <div class="form-group"><label class="form-label">Nom</label><input class="form-input" id="ec-nom" value="${escapeHTML(c.nom || "")}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input class="form-input" id="ec-email" type="email" value="${c.email || ""}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Téléphone</label>
-        <input class="form-input" id="ec-tel" value="${c.tel || ""}">
-      </div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="ec-email" type="email" value="${escapeHTML(c.email || "")}"></div>
+      <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="ec-tel" value="${escapeHTML(c.tel || "")}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Date de naissance</label>
-        <input class="form-input" id="ec-dob" type="date" value="${c.dateNaissance || ""}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Allergies</label>
-        <input class="form-input" id="ec-allergies" value="${c.allergies || ""}">
-      </div>
+      <div class="form-group"><label class="form-label">Date de naissance</label><input class="form-input" id="ec-dob" type="date" value="${c.dateNaissance || ""}"></div>
+      <div class="form-group"><label class="form-label">Allergies</label><input class="form-input" id="ec-allergies" value="${escapeHTML(c.allergies || "")}"></div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="ec-notes">${c.notes || ""}</textarea>
-    </div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="ec-notes">${escapeHTML(c.notes || "")}</textarea></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-primary" onclick="saveEditClient(${id})">SAUVEGARDER</button>
@@ -226,7 +230,7 @@ async function saveEditClient(id) {
   toast("Client mis à jour ✓", "success");
 }
 
-// ── Suppression client — modale 2 étapes avec cascade / anonymisation ─────────
+// ── Suppression cascade / anonymisation ──────────────────────────────────────
 
 function openDeleteClient(id) {
   const c = DB.getClient(id);
@@ -237,48 +241,35 @@ function openDeleteClient(id) {
 
   const linkedSummary = hasLinked
     ? `
-      <div style="margin:12px 0;padding:10px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
-        <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--ink-muted);margin-bottom:8px">DONNÉES LIÉES</div>
-        <div style="display:flex;gap:16px">
-          ${linked.rdvs > 0 ? `<span style="color:var(--ink)">${linked.rdvs} RDV</span>` : ""}
-          ${linked.contrats > 0 ? `<span style="color:var(--ink)">${linked.contrats} contrat${linked.contrats > 1 ? "s" : ""}</span>` : ""}
-          ${linked.finances > 0 ? `<span style="color:var(--accent)">${linked.finances} entrée${linked.finances > 1 ? "s" : ""} finances</span>` : ""}
-        </div>
+    <div style="margin:12px 0;padding:10px 14px;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
+      <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--ink-muted);margin-bottom:8px">DONNÉES LIÉES</div>
+      <div style="display:flex;gap:16px">
+        ${linked.rdvs > 0 ? `<span style="color:var(--ink)">${linked.rdvs} RDV</span>` : ""}
+        ${linked.contrats > 0 ? `<span style="color:var(--ink)">${linked.contrats} contrat${linked.contrats > 1 ? "s" : ""}</span>` : ""}
+        ${linked.finances > 0 ? `<span style="color:var(--accent)">${linked.finances} entrée${linked.finances > 1 ? "s" : ""} finances</span>` : ""}
       </div>
-    `
+    </div>`
     : "";
 
   openModal(`
     <div class="modal-title">SUPPRIMER CLIENT</div>
     <div style="font-size:13px;color:var(--ink-muted);margin-bottom:4px">
-      Que faire de <strong style="color:var(--ink)">${c.prenom} ${c.nom}</strong> ?
+      Que faire de <strong style="color:var(--ink)">${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</strong> ?
     </div>
     ${linkedSummary}
-
     ${
       hasLinked
         ? `
     <div style="padding:12px 14px;background:rgba(200,169,110,0.08);border:1px solid var(--accent-dim);border-radius:var(--radius);font-size:12px;color:var(--ink-muted);margin-bottom:16px">
       <strong style="color:var(--accent);font-family:var(--font-mono);font-size:10px">ANONYMISATION RECOMMANDÉE</strong><br>
-      Efface toutes les informations personnelles tout en conservant l'historique financier pour vos déclarations. Conforme RGPD.
-    </div>
-    `
+      Efface toutes les informations personnelles tout en conservant l'historique financier. Conforme RGPD.
+    </div>`
         : ""
     }
-
     <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      ${
-        hasLinked
-          ? `
-        <button class="btn btn-ghost" style="border-color:var(--accent-dim);color:var(--accent)"
-          onclick="confirmAnonymizeClient(${id})">◌ ANONYMISER</button>
-      `
-          : ""
-      }
-      <button class="btn btn-danger" onclick="confirmDeleteClientCascade(${id})">
-        ${hasLinked ? "✕ SUPPRIMER TOUT" : "✕ SUPPRIMER"}
-      </button>
+      ${hasLinked ? `<button class="btn btn-ghost" style="border-color:var(--accent-dim);color:var(--accent)" onclick="confirmAnonymizeClient(${id})">◌ ANONYMISER</button>` : ""}
+      <button class="btn btn-danger" onclick="confirmDeleteClientCascade(${id})">${hasLinked ? "✕ SUPPRIMER TOUT" : "✕ SUPPRIMER"}</button>
     </div>
   `);
 }
@@ -295,13 +286,12 @@ async function confirmDeleteClientCascade(id) {
   await DB.deleteClientCascade(id);
   setTimeout(() => {
     renderClients();
-    // Rafraîchit le dashboard si visible
     if (typeof renderDashboard === "function") renderDashboard();
   }, 50);
   toast("Client et données liées supprimés", "info");
 }
 
-// ── Fiche client détaillée ────────────────────────────────────────────────────
+// ── Fiche client détail ───────────────────────────────────────────────────────
 
 function openClientDetail(id) {
   const c = DB.getClient(id);
@@ -312,41 +302,38 @@ function openClientDetail(id) {
   const contrats = DB.getContrats().filter((ct) => ct.clientId === id);
 
   openModal(`
-    <div class="modal-title">${c.prenom} ${c.nom}</div>
+    <div class="modal-title">${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</div>
     <div class="client-detail-header">
       <div class="client-avatar-lg">${initials(c.nom, c.prenom)}</div>
       <div style="flex:1">
-        <div style="font-size:16px;font-weight:500">${c.prenom} ${c.nom}</div>
-        <div style="font-size:12px;color:var(--ink-muted);margin-top:4px">${c.email || "—"} · ${c.tel || "—"}</div>
+        <div style="font-size:16px;font-weight:500">${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</div>
+        <div style="font-size:12px;color:var(--ink-muted);margin-top:4px">${escapeHTML(c.email) || "—"} · ${escapeHTML(c.tel) || "—"}</div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          ${c.allergies ? `<span class="badge badge-red">⚠ ${c.allergies}</span>` : ""}
+          ${c.allergies ? `<span class="badge badge-red">⚠ ${escapeHTML(c.allergies)}</span>` : ""}
           <span class="badge badge-gold">${rdvs.length} RDV</span>
           <span class="badge badge-blue">${contrats.length} CONTRAT${contrats.length > 1 ? "S" : ""}</span>
         </div>
       </div>
     </div>
-    ${c.notes ? `<div style="padding:12px 14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);font-size:12px;color:var(--ink-muted);margin-bottom:16px">${c.notes}</div>` : ""}
+    ${c.notes ? `<div style="padding:12px 14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);font-size:12px;color:var(--ink-muted);margin-bottom:16px">${escapeHTML(c.notes)}</div>` : ""}
     <div class="section-title">Historique des RDV</div>
     ${
       rdvs.length === 0
         ? '<div style="color:var(--ink-muted);font-size:12px;margin-bottom:16px">Aucun rendez-vous</div>'
-        : `
-      <div style="margin-bottom:16px">
-        ${rdvs
-          .map(
-            (r) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-            <div>
-              <div style="font-size:13px">${r.titre}</div>
-              <div style="font-size:11px;color:var(--ink-muted)">${formatDate(r.date)} à ${r.heure} · ${r.duree}min</div>
-            </div>
-            ${statutBadge(r.statut)}
-          </div>
-        `,
-          )
-          .join("")}
-      </div>
-    `
+        : `<div style="margin-bottom:16px">
+          ${rdvs
+            .map(
+              (r) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+              <div>
+                <div style="font-size:13px">${escapeHTML(r.titre)}</div>
+                <div style="font-size:11px;color:var(--ink-muted)">${formatDate(r.date)} à ${r.heure} · ${r.duree}min</div>
+              </div>
+              ${statutBadge(r.statut)}
+            </div>`,
+            )
+            .join("")}
+        </div>`
     }
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">FERMER</button>
@@ -364,7 +351,6 @@ function exportClientsCSV() {
     return;
   }
 
-  // En-tête CSV
   const headers = [
     "Prénom",
     "Nom",
@@ -376,11 +362,7 @@ function exportClientsCSV() {
     "Ajouté le",
     "Nb RDV",
   ];
-
-  const escape = (val) => {
-    const s = String(val ?? "").replace(/"/g, '""');
-    return `"${s}"`;
-  };
+  const esc = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
 
   const rows = clients.map((c) => {
     const rdvCount = DB.getRdvs().filter((r) => r.clientId === c.id).length;
@@ -397,30 +379,28 @@ function exportClientsCSV() {
       c.createdAt ? new Date(c.createdAt).toLocaleDateString("fr-FR") : "",
       rdvCount,
     ]
-      .map(escape)
+      .map(esc)
       .join(";");
   });
 
-  const csvContent =
-    "\uFEFF" + [headers.map(escape).join(";"), ...rows].join("\r\n");
-  // BOM \uFEFF pour que Excel ouvre le fichier en UTF-8 sans encodage cassé
+  const csv = "\uFEFF" + [headers.map(esc).join(";"), ...rows].join("\r\n");
 
-  // Mode Electron : boîte de dialogue Enregistrer sous
   if (
     typeof window.electronAPI !== "undefined" &&
     typeof window.electronAPI.saveCSV === "function"
   ) {
-    const filename = `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`;
-    window.electronAPI.saveCSV({ content: csvContent, filename });
+    window.electronAPI.saveCSV({
+      content: csv,
+      filename: `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`,
+    });
     return;
   }
-
-  // Fallback navigateur : download via <a>
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`;
+  const a = Object.assign(document.createElement("a"), {
+    href: url,
+    download: `clients_planink_${new Date().toISOString().slice(0, 10)}.csv`,
+  });
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

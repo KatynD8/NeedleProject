@@ -1,4 +1,4 @@
-// === STOCKS ===
+// === STOCKS — v1.2 ===
 const CATEGORIES = [
   "Encres",
   "Aiguilles",
@@ -57,9 +57,7 @@ function renderStocks() {
 
     ${
       cats.length === 0
-        ? `
-      <div class="empty-state"><div class="empty-icon">◫</div><div class="empty-text">AUCUN PRODUIT</div></div>
-    `
+        ? `<div class="empty-state"><div class="empty-icon">◫</div><div class="empty-text">AUCUN PRODUIT</div></div>`
         : cats
             .map((cat) => {
               const items = filtered.filter((s) => s.categorie === cat);
@@ -122,6 +120,8 @@ function renderStocks() {
   `;
 }
 
+// ── Ajout produit ─────────────────────────────────────────────────────────────
+
 function openAddStock() {
   openModal(`
     <div class="modal-title">NOUVEAU PRODUIT</div>
@@ -179,15 +179,59 @@ async function saveNewStock() {
     unite: document.getElementById("s-unite").value.trim() || "unités",
     seuil: parseFloat(document.getElementById("s-seuil").value) || 0,
     prix: parseFloat(document.getElementById("s-prix").value) || 0,
-    numLot: document.getElementById("s-numlot").value.trim(), // ← clé canonique
+    numLot: document.getElementById("s-numlot").value.trim(),
   });
   closeModal();
   renderStocks();
+  toast("Produit ajouté ✓", "success");
+}
+
+// ── Ajustement stock — avec motif + historique ────────────────────────────────
+
+function _buildMouvementsHTML(stockId) {
+  const mouvements = DB.getStockMouvements(stockId).slice(0, 5);
+  if (mouvements.length === 0) return "";
+
+  const rows = mouvements
+    .map((m) => {
+      const isEntree = m.delta >= 0;
+      const deltaStr = (isEntree ? "+" : "") + m.delta;
+      const color = isEntree ? "var(--green)" : "var(--red)";
+      const date = new Date(m.date).toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "2-digit",
+      });
+      const heure = new Date(m.date).toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <span style="font-family:var(--font-mono);font-size:12px;color:${color};font-weight:700">${deltaStr}</span>
+          <span style="font-size:11px;color:var(--ink-muted);margin-left:8px">→ ${m.quantiteApres}</span>
+          ${m.motif ? `<span style="font-size:11px;color:var(--ink-muted);margin-left:8px;font-style:italic">${m.motif}</span>` : ""}
+        </div>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--ink-faint)">${date} ${heure}</span>
+      </div>
+    `;
+    })
+    .join("");
+
+  return `
+    <div style="margin-top:20px">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--ink-muted);margin-bottom:8px">
+        HISTORIQUE (5 DERNIERS)
+      </div>
+      ${rows}
+    </div>
+  `;
 }
 
 function openAdjustStock(id) {
   const s = DB.getStocks().find((x) => x.id === id);
   if (!s) return;
+
   openModal(`
     <div class="modal-title">AJUSTER STOCK</div>
     <div style="text-align:center;margin-bottom:20px">
@@ -195,30 +239,95 @@ function openAdjustStock(id) {
       <div style="font-family:var(--font-display);font-size:48px;color:var(--accent);margin:8px 0">${s.quantite}</div>
       <div style="font-size:12px;color:var(--ink-muted)">${s.unite}</div>
     </div>
+
     <div class="form-group">
       <label class="form-label">Nouvelle quantité</label>
-      <input class="form-input" id="adj-qty" type="number" value="${s.quantite}" min="0" style="font-size:18px;text-align:center">
+      <input class="form-input" id="adj-qty" type="number" value="${s.quantite}" min="0"
+        style="font-size:18px;text-align:center">
     </div>
     <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
+      <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=Math.max(0,parseFloat(i.value||0)-10)">−10</button>
       <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=Math.max(0,parseFloat(i.value||0)-5)">−5</button>
       <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=Math.max(0,parseFloat(i.value||0)-1)">−1</button>
       <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=parseFloat(i.value||0)+1">+1</button>
       <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=parseFloat(i.value||0)+5">+5</button>
+      <button class="btn btn-ghost" onclick="let i=document.getElementById('adj-qty');i.value=parseFloat(i.value||0)+10">+10</button>
     </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+
+    <div class="form-group">
+      <label class="form-label">Motif (optionnel)</label>
+      <select class="form-select" id="adj-motif-select" onchange="
+        const other = document.getElementById('adj-motif-other');
+        other.style.display = this.value === '__autre' ? '' : 'none';
+        if (this.value !== '__autre') document.getElementById('adj-motif-input').value = this.value;
+      ">
+        <option value="">— Sélectionner ou laisser vide —</option>
+        <option value="Réception commande">Réception commande</option>
+        <option value="Utilisation séance">Utilisation séance</option>
+        <option value="Perte / casse">Perte / casse</option>
+        <option value="Correction inventaire">Correction inventaire</option>
+        <option value="Retour fournisseur">Retour fournisseur</option>
+        <option value="__autre">✎ Autre...</option>
+      </select>
+      <input class="form-input" id="adj-motif-other" id2="adj-motif-input"
+        placeholder="Préciser le motif..." style="display:none;margin-top:8px">
+      <input type="hidden" id="adj-motif-input">
+    </div>
+
+    ${_buildMouvementsHTML(id)}
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
-      <button class="btn btn-primary" onclick="saveAdjustStock(${id})">VALIDER</button>
+      <button class="btn btn-primary" onclick="saveAdjustStock(${id}, ${s.quantite})">VALIDER</button>
     </div>
   `);
+
+  // Synchronise l'input caché avec le select au changement
+  document
+    .getElementById("adj-motif-select")
+    .addEventListener("change", function () {
+      const hidden = document.getElementById("adj-motif-input");
+      if (this.value !== "__autre") hidden.value = this.value;
+    });
+  document
+    .getElementById("adj-motif-other")
+    .addEventListener("input", function () {
+      document.getElementById("adj-motif-input").value = this.value;
+    });
 }
 
-async function saveAdjustStock(id) {
-  await DB.updateStock(id, {
-    quantite: parseFloat(document.getElementById("adj-qty").value) || 0,
-  });
+async function saveAdjustStock(id, quantiteAvant) {
+  const nouvelleQte = parseFloat(document.getElementById("adj-qty").value) || 0;
+  const motif =
+    document.getElementById("adj-motif-input").value.trim() ||
+    document
+      .getElementById("adj-motif-select")
+      .value.replace("__autre", "")
+      .trim();
+  const delta = nouvelleQte - quantiteAvant;
+
+  // Mise à jour du stock
+  await DB.updateStock(id, { quantite: nouvelleQte });
+
+  // Enregistrement du mouvement seulement si la quantité a changé
+  if (delta !== 0) {
+    await DB.addStockMouvement({
+      stockId: id,
+      delta,
+      quantiteApres: nouvelleQte,
+      motif,
+    });
+  }
+
   closeModal();
   renderStocks();
+
+  // Toast contextuel selon le sens du mouvement
+  if (delta > 0) toast(`+${delta} enregistré ✓`, "success");
+  else if (delta < 0) toast(`${delta} enregistré ✓`, "info");
 }
+
+// ── Édition produit ───────────────────────────────────────────────────────────
 
 function openEditStock(id) {
   const s = DB.getStocks().find((x) => x.id === id);
@@ -274,15 +383,17 @@ async function saveEditStock(id) {
     unite: document.getElementById("es-unite").value.trim(),
     seuil: parseFloat(document.getElementById("es-seuil").value) || 0,
     prix: parseFloat(document.getElementById("es-prix").value) || 0,
-    numLot: document.getElementById("es-numlot").value.trim(), // ← clé canonique
+    numLot: document.getElementById("es-numlot").value.trim(),
   });
   closeModal();
   renderStocks();
+  toast("Produit mis à jour ✓", "success");
 }
 
 async function deleteStock(id) {
   if (confirm("Supprimer ce produit ?")) {
     await DB.deleteStock(id);
     renderStocks();
+    toast("Produit supprimé", "info");
   }
 }

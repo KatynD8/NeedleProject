@@ -1,10 +1,34 @@
-// === DATA LAYER — v1.3 ===
+// === DATA LAYER — v1.5 ===
 // Sauvegarde dans un vrai fichier JSON sur le disque via Electron
 // Fallback sur localStorage si ouvert dans un navigateur normal
 
 var IS_ELECTRON = typeof window.electronAPI !== "undefined";
-
 var _cache = null;
+
+// ── Queue persist() ─────────────────────────────────────────────────────────
+// Sérialise toutes les écritures : chaque appel à persist() s'enchaîne
+// derrière le précédent via une chaîne de Promises.
+// Garantit qu'une seule écriture est active à la fois, sans bloquer l'UI.
+let _persistLock = Promise.resolve();
+
+async function persist() {
+  _persistLock = _persistLock.then(_doPersist);
+  return _persistLock;
+}
+
+async function _doPersist() {
+  if (IS_ELECTRON) {
+    await window.electronAPI.saveData(_cache);
+  } else {
+    localStorage.setItem("inkmaster_clients",         JSON.stringify(_cache.clients));
+    localStorage.setItem("inkmaster_rdvs",            JSON.stringify(_cache.rdvs));
+    localStorage.setItem("inkmaster_stocks",          JSON.stringify(_cache.stocks));
+    localStorage.setItem("inkmaster_contrats",        JSON.stringify(_cache.contrats));
+    localStorage.setItem("inkmaster_finances",        JSON.stringify(_cache.finances));
+    localStorage.setItem("inkmaster_stockMouvements", JSON.stringify(_cache.stockMouvements));
+    localStorage.setItem("inkmaster_settings",        JSON.stringify(_cache.settings));
+  }
+}
 
 async function loadCache() {
   if (_cache) return _cache;
@@ -12,22 +36,24 @@ async function loadCache() {
     _cache = await window.electronAPI.loadData();
   } else {
     _cache = {
-      clients: JSON.parse(localStorage.getItem("inkmaster_clients") || "[]"),
-      rdvs: JSON.parse(localStorage.getItem("inkmaster_rdvs") || "[]"),
-      stocks: JSON.parse(localStorage.getItem("inkmaster_stocks") || "[]"),
-      contrats: JSON.parse(localStorage.getItem("inkmaster_contrats") || "[]"),
-      finances: JSON.parse(localStorage.getItem("inkmaster_finances") || "[]"),
-      settings: JSON.parse(localStorage.getItem("inkmaster_settings") || "{}"),
+      clients:         JSON.parse(localStorage.getItem("inkmaster_clients")         || "[]"),
+      rdvs:            JSON.parse(localStorage.getItem("inkmaster_rdvs")            || "[]"),
+      stocks:          JSON.parse(localStorage.getItem("inkmaster_stocks")          || "[]"),
+      contrats:        JSON.parse(localStorage.getItem("inkmaster_contrats")        || "[]"),
+      finances:        JSON.parse(localStorage.getItem("inkmaster_finances")        || "[]"),
+      stockMouvements: JSON.parse(localStorage.getItem("inkmaster_stockMouvements") || "[]"),
+      settings:        JSON.parse(localStorage.getItem("inkmaster_settings")        || "{}"),
     };
   }
-  _cache.clients = _cache.clients || [];
-  _cache.rdvs = _cache.rdvs || [];
-  _cache.stocks = _cache.stocks || [];
-  _cache.contrats = _cache.contrats || [];
-  _cache.finances = _cache.finances || [];
-  _cache.settings = _cache.settings || {};
+  _cache.clients         = _cache.clients         || [];
+  _cache.rdvs            = _cache.rdvs            || [];
+  _cache.stocks          = _cache.stocks          || [];
+  _cache.contrats        = _cache.contrats        || [];
+  _cache.finances        = _cache.finances        || [];
+  _cache.stockMouvements = _cache.stockMouvements || [];
+  _cache.settings        = _cache.settings        || {};
 
-  // Migration silencieuse : normalise l'ancienne clé "lot" → "numLot"
+  // Migration : normalise l'ancienne clé "lot" → "numLot"
   _cache.stocks = _cache.stocks.map((s) => {
     if (s.lot !== undefined && s.numLot === undefined) {
       s.numLot = s.lot;
@@ -37,19 +63,6 @@ async function loadCache() {
   });
 
   return _cache;
-}
-
-async function persist() {
-  if (IS_ELECTRON) {
-    await window.electronAPI.saveData(_cache);
-  } else {
-    localStorage.setItem("inkmaster_clients", JSON.stringify(_cache.clients));
-    localStorage.setItem("inkmaster_rdvs", JSON.stringify(_cache.rdvs));
-    localStorage.setItem("inkmaster_stocks", JSON.stringify(_cache.stocks));
-    localStorage.setItem("inkmaster_contrats", JSON.stringify(_cache.contrats));
-    localStorage.setItem("inkmaster_finances", JSON.stringify(_cache.finances));
-    localStorage.setItem("inkmaster_settings", JSON.stringify(_cache.settings));
-  }
 }
 
 // Helpers formatage
@@ -64,12 +77,8 @@ function formatMoney(n) {
 
 const DB = {
   // --- CLIENTS ---
-  getClients() {
-    return _cache.clients;
-  },
-  getClient(id) {
-    return _cache.clients.find((c) => c.id === id);
-  },
+  getClients() { return _cache.clients; },
+  getClient(id) { return _cache.clients.find((c) => c.id === id); },
   async addClient(client) {
     client.id = Date.now();
     client.createdAt = new Date().toISOString();
@@ -79,74 +88,50 @@ const DB = {
   },
   async updateClient(id, updates) {
     const i = _cache.clients.findIndex((c) => c.id === id);
-    if (i !== -1) {
-      _cache.clients[i] = { ..._cache.clients[i], ...updates };
-      await persist();
-    }
+    if (i !== -1) { _cache.clients[i] = { ..._cache.clients[i], ...updates }; await persist(); }
   },
-  async deleteClient(id) {
+  // Méthode basique — préférer deleteClientCascade ou anonymizeClient
+  _deleteClientRaw(id) {
     _cache.clients = _cache.clients.filter((c) => c.id !== id);
-    await persist();
+    return persist();
   },
-
-  // Suppression en cascade : client + tous ses RDVs + contrats.
-  // Les finances sont conservées (clientId mis à null) pour ne pas fausser
-  // les stats historiques de CA.
   async deleteClientCascade(id) {
-    _cache.clients = _cache.clients.filter((c) => c.id !== id);
-    _cache.rdvs = _cache.rdvs.filter((r) => r.clientId !== id);
+    _cache.clients  = _cache.clients.filter((c) => c.id !== id);
+    _cache.rdvs     = _cache.rdvs.filter((r) => r.clientId !== id);
     _cache.contrats = _cache.contrats.filter((ct) => ct.clientId !== id);
     _cache.finances = _cache.finances.map((f) =>
-      f.clientId === id ? { ...f, clientId: null, _clientDeleted: true } : f,
+      f.clientId === id ? { ...f, clientId: null, _clientDeleted: true } : f
     );
     await persist();
   },
-
-  // Anonymisation RGPD : efface toutes les PII mais conserve l'historique
-  // RDV/finances/contrats pour les stats (clientId reste valide).
   async anonymizeClient(id) {
     const i = _cache.clients.findIndex((c) => c.id === id);
     if (i === -1) return;
     _cache.clients[i] = {
       id,
-      prenom: "Client",
-      nom: "Anonymisé",
-      email: "",
-      tel: "",
-      dateNaissance: "",
-      allergies: "",
-      notes: "",
+      prenom: "Client", nom: "Anonymisé",
+      email: "", tel: "", dateNaissance: "", allergies: "", notes: "",
       createdAt: _cache.clients[i].createdAt,
       _anonymized: true,
       _anonymizedAt: new Date().toISOString(),
     };
     _cache.contrats = _cache.contrats.map((ct) =>
       ct.clientId === id
-        ? {
-            ...ct,
-            clientNom: "Client Anonymisé",
-            clientEmail: "",
-            clientTel: "",
-            clientDob: "",
-          }
-        : ct,
+        ? { ...ct, clientNom: "Client Anonymisé", clientEmail: "", clientTel: "", clientDob: "" }
+        : ct
     );
     await persist();
   },
-
-  // Retourne le nombre d'enregistrements liés (pour la modale de confirmation)
   getClientLinkedData(id) {
     return {
-      rdvs: _cache.rdvs.filter((r) => r.clientId === id).length,
+      rdvs:     _cache.rdvs.filter((r) => r.clientId === id).length,
       contrats: _cache.contrats.filter((ct) => ct.clientId === id).length,
       finances: _cache.finances.filter((f) => f.clientId === id).length,
     };
   },
 
   // --- RDV ---
-  getRdvs() {
-    return _cache.rdvs;
-  },
+  getRdvs() { return _cache.rdvs; },
   async addRdv(rdv) {
     rdv.id = Date.now();
     _cache.rdvs.push(rdv);
@@ -155,10 +140,7 @@ const DB = {
   },
   async updateRdv(id, updates) {
     const i = _cache.rdvs.findIndex((r) => r.id === id);
-    if (i !== -1) {
-      _cache.rdvs[i] = { ..._cache.rdvs[i], ...updates };
-      await persist();
-    }
+    if (i !== -1) { _cache.rdvs[i] = { ..._cache.rdvs[i], ...updates }; await persist(); }
   },
   async deleteRdv(id) {
     _cache.rdvs = _cache.rdvs.filter((r) => r.id !== id);
@@ -166,9 +148,7 @@ const DB = {
   },
 
   // --- STOCKS ---
-  getStocks() {
-    return _cache.stocks;
-  },
+  getStocks() { return _cache.stocks; },
   async addStock(item) {
     item.id = Date.now();
     _cache.stocks.push(item);
@@ -177,20 +157,30 @@ const DB = {
   },
   async updateStock(id, updates) {
     const i = _cache.stocks.findIndex((s) => s.id === id);
-    if (i !== -1) {
-      _cache.stocks[i] = { ..._cache.stocks[i], ...updates };
-      await persist();
-    }
+    if (i !== -1) { _cache.stocks[i] = { ..._cache.stocks[i], ...updates }; await persist(); }
   },
   async deleteStock(id) {
     _cache.stocks = _cache.stocks.filter((s) => s.id !== id);
     await persist();
   },
 
-  // --- CONTRATS ---
-  getContrats() {
-    return _cache.contrats;
+  // --- MOUVEMENTS DE STOCK ---
+  async addStockMouvement({ stockId, delta, quantiteApres, motif }) {
+    _cache.stockMouvements.push({
+      id: Date.now(), stockId, delta, quantiteApres,
+      motif: motif || "",
+      date: new Date().toISOString(),
+    });
+    await persist();
   },
+  getStockMouvements(stockId) {
+    return (_cache.stockMouvements || [])
+      .filter((m) => m.stockId === stockId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  // --- CONTRATS ---
+  getContrats() { return _cache.contrats; },
   async addContrat(contrat) {
     contrat.id = Date.now();
     contrat.createdAt = new Date().toISOString();
@@ -201,11 +191,7 @@ const DB = {
   async updateContrat(id, updates) {
     const i = _cache.contrats.findIndex((c) => c.id === id);
     if (i !== -1) {
-      _cache.contrats[i] = {
-        ..._cache.contrats[i],
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      };
+      _cache.contrats[i] = { ..._cache.contrats[i], ...updates, updatedAt: new Date().toISOString() };
       await persist();
     }
   },
@@ -215,9 +201,7 @@ const DB = {
   },
 
   // --- FINANCES ---
-  getFinances() {
-    return _cache.finances;
-  },
+  getFinances() { return _cache.finances; },
   getFinancesMonth(year, month) {
     return _cache.finances.filter((f) => {
       const d = new Date(f.date);
@@ -234,16 +218,10 @@ const DB = {
       .filter((f) => f.type === "depense")
       .reduce((sum, f) => sum + (f.montant || 0), 0);
   },
-  // Tarif moyen sur les recettes "Séance" de l'année — source fiable vs rdv.tarif
   getAvgTarifSeance(year) {
     const seances = _cache.finances.filter((f) => {
       const d = new Date(f.date);
-      return (
-        d.getFullYear() === year &&
-        f.type === "recette" &&
-        f.categorie === "Séance" &&
-        f.montant > 0
-      );
+      return d.getFullYear() === year && f.type === "recette" && f.categorie === "Séance" && f.montant > 0;
     });
     if (seances.length === 0) return 0;
     return seances.reduce((sum, f) => sum + f.montant, 0) / seances.length;
@@ -257,10 +235,7 @@ const DB = {
   },
   async updateFinance(id, updates) {
     const i = _cache.finances.findIndex((f) => f.id === id);
-    if (i !== -1) {
-      _cache.finances[i] = { ..._cache.finances[i], ...updates };
-      await persist();
-    }
+    if (i !== -1) { _cache.finances[i] = { ..._cache.finances[i], ...updates }; await persist(); }
   },
   async deleteFinance(id) {
     _cache.finances = _cache.finances.filter((f) => f.id !== id);
@@ -268,230 +243,49 @@ const DB = {
   },
 
   // --- SETTINGS ---
-  getSettings() {
-    return _cache.settings;
-  },
+  getSettings() { return _cache.settings; },
   async saveSettings(updates) {
     _cache.settings = { ..._cache.settings, ...updates };
     await persist();
   },
 
-  // --- SEED DEMO DATA ---
+  // --- SEED ---
   async seed() {
     if (_cache.settings._seeded) return;
 
     _cache.clients = [
-      {
-        id: 1001,
-        nom: "Martin",
-        prenom: "Laure",
-        email: "laure.martin@email.fr",
-        tel: "06 12 34 56 78",
-        dateNaissance: "1994-07-15",
-        allergies: "Latex",
-        notes: "Cliente régulière, manga style",
-        createdAt: "2024-01-10T10:00:00Z",
-      },
-      {
-        id: 1002,
-        nom: "Dupont",
-        prenom: "Marc",
-        email: "marc.dupont@email.fr",
-        tel: "07 98 76 54 32",
-        dateNaissance: "1989-03-22",
-        allergies: "",
-        notes: "Amateur de géométrie",
-        createdAt: "2024-02-14T14:00:00Z",
-      },
-      {
-        id: 1003,
-        nom: "Leclerc",
-        prenom: "Sophie",
-        email: "sophie.leclerc@email.fr",
-        tel: "06 55 44 33 22",
-        dateNaissance: "1998-11-05",
-        allergies: "Nickel",
-        notes: "Première séance",
-        createdAt: "2024-03-01T09:00:00Z",
-      },
+      { id: 1001, nom: "Martin",  prenom: "Laure",  email: "laure.martin@email.fr",   tel: "06 12 34 56 78", dateNaissance: "1994-07-15", allergies: "Latex",  notes: "Cliente régulière, manga style", createdAt: "2024-01-10T10:00:00Z" },
+      { id: 1002, nom: "Dupont",  prenom: "Marc",   email: "marc.dupont@email.fr",    tel: "07 98 76 54 32", dateNaissance: "1989-03-22", allergies: "",       notes: "Amateur de géométrie",          createdAt: "2024-02-14T14:00:00Z" },
+      { id: 1003, nom: "Leclerc", prenom: "Sophie", email: "sophie.leclerc@email.fr", tel: "06 55 44 33 22", dateNaissance: "1998-11-05", allergies: "Nickel", notes: "Première séance",               createdAt: "2024-03-01T09:00:00Z" },
     ];
-
-    const today = new Date().toISOString().split("T")[0];
-    const tomorrow = new Date(Date.now() + 86400000)
-      .toISOString()
-      .split("T")[0];
-    const j2 = new Date(Date.now() + 172800000).toISOString().split("T")[0];
-
+    const today    = new Date().toISOString().split("T")[0];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    const j2       = new Date(Date.now() + 172800000).toISOString().split("T")[0];
     _cache.rdvs = [
-      {
-        id: 2001,
-        clientId: 1001,
-        titre: "Dragon dos complet",
-        date: today,
-        heure: "10:00",
-        duree: 180,
-        statut: "confirme",
-        notes: "Séance 3/5",
-      },
-      {
-        id: 2002,
-        clientId: 1002,
-        titre: "Mandala avant-bras",
-        date: tomorrow,
-        heure: "14:00",
-        duree: 90,
-        statut: "confirme",
-        notes: "",
-      },
-      {
-        id: 2003,
-        clientId: 1003,
-        titre: "Rose minimaliste",
-        date: j2,
-        heure: "11:00",
-        duree: 60,
-        statut: "attente",
-        notes: "Première fois",
-      },
+      { id: 2001, clientId: 1001, titre: "Dragon dos complet", date: today,    heure: "10:00", duree: 180, statut: "confirme", notes: "Séance 3/5"    },
+      { id: 2002, clientId: 1002, titre: "Mandala avant-bras", date: tomorrow, heure: "14:00", duree: 90,  statut: "confirme", notes: ""              },
+      { id: 2003, clientId: 1003, titre: "Rose minimaliste",   date: j2,       heure: "11:00", duree: 60,  statut: "attente",  notes: "Première fois" },
     ];
-
     _cache.stocks = [
-      {
-        id: 3001,
-        categorie: "Encres",
-        nom: "Encre Noire Intenze",
-        quantite: 8,
-        unite: "flacons",
-        seuil: 5,
-        prix: 12.5,
-        numLot: "",
-      },
-      {
-        id: 3002,
-        categorie: "Encres",
-        nom: "Encre Rouge Dynamic",
-        quantite: 3,
-        unite: "flacons",
-        seuil: 4,
-        prix: 14,
-        numLot: "",
-      },
-      {
-        id: 3003,
-        categorie: "Encres",
-        nom: "Encre Bleue Eternal",
-        quantite: 6,
-        unite: "flacons",
-        seuil: 3,
-        prix: 13,
-        numLot: "",
-      },
-      {
-        id: 3004,
-        categorie: "Aiguilles",
-        nom: "Aiguilles RL #12",
-        quantite: 150,
-        unite: "pièces",
-        seuil: 50,
-        prix: 0.8,
-        numLot: "",
-      },
-      {
-        id: 3005,
-        categorie: "Aiguilles",
-        nom: "Aiguilles Magnum Courbe",
-        quantite: 40,
-        unite: "pièces",
-        seuil: 30,
-        prix: 1.2,
-        numLot: "",
-      },
-      {
-        id: 3006,
-        categorie: "Hygiène",
-        nom: "Gants Nitrile M",
-        quantite: 2,
-        unite: "boîtes",
-        seuil: 3,
-        prix: 8,
-        numLot: "",
-      },
-      {
-        id: 3007,
-        categorie: "Hygiène",
-        nom: "Film plastique",
-        quantite: 5,
-        unite: "rouleaux",
-        seuil: 2,
-        prix: 6,
-        numLot: "",
-      },
-      {
-        id: 3008,
-        categorie: "Soins",
-        nom: "Baume Tattoo Care",
-        quantite: 12,
-        unite: "tubes",
-        seuil: 5,
-        prix: 9.5,
-        numLot: "",
-      },
+      { id: 3001, categorie: "Encres",    nom: "Encre Noire Intenze",     quantite: 8,   unite: "flacons",  seuil: 5,  prix: 12.5, numLot: "" },
+      { id: 3002, categorie: "Encres",    nom: "Encre Rouge Dynamic",     quantite: 3,   unite: "flacons",  seuil: 4,  prix: 14,   numLot: "" },
+      { id: 3003, categorie: "Encres",    nom: "Encre Bleue Eternal",     quantite: 6,   unite: "flacons",  seuil: 3,  prix: 13,   numLot: "" },
+      { id: 3004, categorie: "Aiguilles", nom: "Aiguilles RL #12",        quantite: 150, unite: "pièces",   seuil: 50, prix: 0.8,  numLot: "" },
+      { id: 3005, categorie: "Aiguilles", nom: "Aiguilles Magnum Courbe", quantite: 40,  unite: "pièces",   seuil: 30, prix: 1.2,  numLot: "" },
+      { id: 3006, categorie: "Hygiène",   nom: "Gants Nitrile M",         quantite: 2,   unite: "boîtes",   seuil: 3,  prix: 8,    numLot: "" },
+      { id: 3007, categorie: "Hygiène",   nom: "Film plastique",          quantite: 5,   unite: "rouleaux", seuil: 2,  prix: 6,    numLot: "" },
+      { id: 3008, categorie: "Soins",     nom: "Baume Tattoo Care",       quantite: 12,  unite: "tubes",    seuil: 5,  prix: 9.5,  numLot: "" },
     ];
-
     _cache.contrats = [
-      {
-        id: 4001,
-        clientId: 1001,
-        clientNom: "Laure Martin",
-        description: "Dragon dos complet",
-        zone: "Dos",
-        date: "2024-03-15",
-        signe: true,
-        prixTotal: 800,
-        acompte: 200,
-        lotsAiguilles: [],
-        lotsEncres: [],
-        createdAt: "2024-03-15T09:00:00Z",
-      },
+      { id: 4001, clientId: 1001, clientNom: "Laure Martin", description: "Dragon dos complet", zone: "Dos", date: "2024-03-15", signe: true, prixTotal: 800, acompte: 200, lotsAiguilles: [], lotsEncres: [], createdAt: "2024-03-15T09:00:00Z" },
     ];
-
     const thisMonth = new Date().toISOString().slice(0, 7);
     _cache.finances = [
-      {
-        id: 5001,
-        type: "recette",
-        montant: 250,
-        description: "Séance mandala",
-        categorie: "Séance",
-        date: `${thisMonth}-05`,
-        clientId: 1002,
-        modePaiement: "CB",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 5002,
-        type: "recette",
-        montant: 180,
-        description: "Rose minimaliste",
-        categorie: "Séance",
-        date: `${thisMonth}-08`,
-        clientId: 1003,
-        modePaiement: "Espèces",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 5003,
-        type: "depense",
-        montant: 45,
-        description: "Commande encres",
-        categorie: "Encres",
-        date: `${thisMonth}-03`,
-        fournisseur: "Cheyenne",
-        modePaiement: "Virement",
-        createdAt: new Date().toISOString(),
-      },
+      { id: 5001, type: "recette", montant: 250, description: "Séance mandala",   categorie: "Séance", date: `${thisMonth}-05`, clientId: 1002, modePaiement: "CB",      createdAt: new Date().toISOString() },
+      { id: 5002, type: "recette", montant: 180, description: "Rose minimaliste", categorie: "Séance", date: `${thisMonth}-08`, clientId: 1003, modePaiement: "Espèces", createdAt: new Date().toISOString() },
+      { id: 5003, type: "depense", montant: 45,  description: "Commande encres",  categorie: "Encres", date: `${thisMonth}-03`, fournisseur: "Cheyenne", modePaiement: "Virement", createdAt: new Date().toISOString() },
     ];
-
+    _cache.stockMouvements = [];
     _cache.settings._seeded = true;
     await persist();
   },
@@ -502,4 +296,8 @@ loadCache().then(async () => {
   await DB.seed();
   if (typeof applyLogoToSidebar === "function") applyLogoToSidebar();
   if (typeof renderDashboard === "function") renderDashboard();
+  // Notifications desktop RDV J-1 — après le rendu initial pour ne pas bloquer
+  setTimeout(() => {
+    if (typeof checkRdvNotifications === "function") checkRdvNotifications();
+  }, 1500);
 });

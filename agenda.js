@@ -1,8 +1,7 @@
-// === AGENDA ===
+// === AGENDA — v1.2 ===
 let agendaYear = new Date().getFullYear();
 let agendaMonth = new Date().getMonth();
 
-// Couleurs des chips selon statut
 const RDV_CHIP_STYLE = {
   confirme:
     "background:rgba(39,174,96,0.18);color:#2ecc71;border:1px solid rgba(39,174,96,0.35)",
@@ -17,6 +16,75 @@ const RDV_CHIP_STYLE = {
 function rdvChipStyle(statut) {
   return RDV_CHIP_STYLE[statut] || RDV_CHIP_STYLE.attente;
 }
+
+// ── Notifications desktop RDV J-1 ────────────────────────────────────────────
+// Appelé une fois au démarrage depuis data.js init.
+// Compare chaque RDV confirmé à J+1 et envoie une notification native Electron.
+// Le flag _notifSentToday évite les doublons si l'app est relancée le même jour.
+
+function checkRdvNotifications() {
+  if (
+    typeof window.electronAPI === "undefined" ||
+    typeof window.electronAPI.showNotification !== "function"
+  )
+    return;
+
+  const today = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+
+  // Guard : ne notifie qu'une fois par jour
+  const lastNotif = DB.getSettings()._lastNotifDate;
+  if (lastNotif === today) return;
+
+  const rdvsDemain = DB.getRdvs().filter(
+    (r) =>
+      r.date === tomorrow &&
+      (r.statut === "confirme" || r.statut === "attente"),
+  );
+
+  if (rdvsDemain.length === 0) return;
+
+  rdvsDemain.forEach((r) => {
+    const cn = clientName(r.clientId);
+    window.electronAPI.showNotification({
+      title: `📅 RDV demain — ${r.heure}`,
+      body: `${r.titre} avec ${cn} (${r.duree}min)`,
+    });
+  });
+
+  // Marque la date pour éviter les doublons
+  DB.saveSettings({ _lastNotifDate: today });
+}
+
+// ── Détection de conflits horaires ───────────────────────────────────────────
+
+function _detecterConflits(date, heure, duree, excludeId) {
+  if (!date || !heure || !duree) return [];
+  const toMin = (h) => {
+    const [hh, mm] = h.split(":").map(Number);
+    return hh * 60 + mm;
+  };
+  const debut = toMin(heure);
+  const fin = debut + parseInt(duree, 10);
+  return DB.getRdvs().filter((r) => {
+    if (r.id === excludeId) return false;
+    if (r.date !== date) return false;
+    if (r.statut === "annule") return false;
+    const rDebut = toMin(r.heure);
+    const rFin = rDebut + (r.duree || 60);
+    return debut < rFin && fin > rDebut;
+  });
+}
+
+function _warnConflits(conflits) {
+  if (conflits.length === 0) return;
+  const noms = conflits
+    .map((r) => `${r.heure} ${clientName(r.clientId)}`)
+    .join(", ");
+  toast(`⚠ Chevauchement détecté : ${noms}`, "error");
+}
+
+// ── Rendu calendrier ─────────────────────────────────────────────────────────
 
 function renderAgenda() {
   const rdvs = DB.getRdvs();
@@ -42,20 +110,17 @@ function renderAgenda() {
   let startOffset = (firstDay.getDay() + 6) % 7;
 
   const days = [];
-  for (let i = startOffset - 1; i >= 0; i--) {
+  for (let i = startOffset - 1; i >= 0; i--)
     days.push({ date: new Date(agendaYear, agendaMonth, -i), current: false });
-  }
-  for (let d = 1; d <= lastDay.getDate(); d++) {
+  for (let d = 1; d <= lastDay.getDate(); d++)
     days.push({ date: new Date(agendaYear, agendaMonth, d), current: true });
-  }
   let fill = 7 - (days.length % 7);
   if (fill === 7) fill = 0;
-  for (let d = 1; d <= fill; d++) {
+  for (let d = 1; d <= fill; d++)
     days.push({
       date: new Date(agendaYear, agendaMonth + 1, d),
       current: false,
     });
-  }
 
   function toISO(d) {
     const y = d.getFullYear();
@@ -107,13 +172,12 @@ function renderAgenda() {
                   .slice(0, 3)
                   .map(
                     (r) => `
-                  <div class="rdv-chip" style="${rdvChipStyle(r.statut)}" title="${r.titre}">${r.heure} ${r.titre}</div>
+                  <div class="rdv-chip" style="${rdvChipStyle(r.statut)}" title="${escapeHTML(r.titre)}">${r.heure} ${escapeHTML(r.titre)}</div>
                 `,
                   )
                   .join("")}
                 ${dayRdvs.length > 3 ? `<div style="font-size:9px;color:var(--ink-muted);font-family:var(--font-mono)">+${dayRdvs.length - 3} autres</div>` : ""}
-              </div>
-            `;
+              </div>`;
             })
             .join("")}
         </div>
@@ -131,8 +195,8 @@ function renderAgenda() {
               <div class="card" style="padding:12px;cursor:pointer" onclick="openRdvDetail(${r.id})">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start">
                   <div>
-                    <div style="font-size:12px;font-weight:500;margin-bottom:4px">${r.titre}</div>
-                    <div style="font-size:11px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
+                    <div style="font-size:12px;font-weight:500;margin-bottom:4px">${escapeHTML(r.titre)}</div>
+                    <div style="font-size:11px;color:var(--ink-muted)">${escapeHTML(clientName(r.clientId))}</div>
                     <div style="font-size:11px;color:var(--accent);font-family:var(--font-mono);margin-top:4px">${formatDate(r.date)} · ${r.heure}</div>
                   </div>
                   <div style="text-align:right">
@@ -140,8 +204,7 @@ function renderAgenda() {
                     <div style="margin-top:4px">${statutBadge(r.statut)}</div>
                   </div>
                 </div>
-              </div>
-            `,
+              </div>`,
                   )
                   .join("")
           }
@@ -150,6 +213,8 @@ function renderAgenda() {
     </div>
   `;
 }
+
+// ── Formulaire RDV ────────────────────────────────────────────────────────────
 
 function openAddRdvForClient(clientId) {
   navigate("agenda");
@@ -164,7 +229,7 @@ function openAddRdv(presetClientId) {
       <label class="form-label">Client</label>
       <select class="form-select" id="rdv-client">
         <option value="">Sélectionner...</option>
-        ${clients.map((c) => `<option value="${c.id}" ${c.id == presetClientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
+        ${clients.map((c) => `<option value="${c.id}" ${c.id == presetClientId ? "selected" : ""}>${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</option>`).join("")}
       </select>
     </div>
     <div class="form-group">
@@ -172,20 +237,11 @@ function openAddRdv(presetClientId) {
       <input class="form-input" id="rdv-titre" placeholder="Dragon avant-bras, Rose géométrique...">
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" id="rdv-date" type="date" value="${new Date().toISOString().split("T")[0]}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Heure</label>
-        <input class="form-input" id="rdv-heure" type="time" value="10:00">
-      </div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="rdv-date" type="date" value="${new Date().toISOString().split("T")[0]}"></div>
+      <div class="form-group"><label class="form-label">Heure</label><input class="form-input" id="rdv-heure" type="time" value="10:00"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Durée (min)</label>
-        <input class="form-input" id="rdv-duree" type="number" value="120" min="15" step="15">
-      </div>
+      <div class="form-group"><label class="form-label">Durée (min)</label><input class="form-input" id="rdv-duree" type="number" value="120" min="15" step="15"></div>
       <div class="form-group">
         <label class="form-label">Statut</label>
         <select class="form-select" id="rdv-statut">
@@ -194,10 +250,7 @@ function openAddRdv(presetClientId) {
         </select>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="rdv-notes" placeholder="Références, détails..."></textarea>
-    </div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="rdv-notes" placeholder="Références, détails..."></textarea></div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
       <button class="btn btn-primary" onclick="saveNewRdv()">ENREGISTRER</button>
@@ -212,19 +265,26 @@ async function saveNewRdv() {
     alert("Client et titre obligatoires.");
     return;
   }
+  const date = document.getElementById("rdv-date").value;
+  const heure = document.getElementById("rdv-heure").value;
+  const duree = parseInt(document.getElementById("rdv-duree").value);
   await DB.addRdv({
     clientId,
     titre,
-    date: document.getElementById("rdv-date").value,
-    heure: document.getElementById("rdv-heure").value,
-    duree: parseInt(document.getElementById("rdv-duree").value),
+    date,
+    heure,
+    duree,
     statut: document.getElementById("rdv-statut").value,
     notes: document.getElementById("rdv-notes").value.trim(),
   });
   closeModal();
   renderAgenda();
   renderDashboard();
+  const conflits = _detecterConflits(date, heure, duree, null);
+  _warnConflits(conflits);
 }
+
+// ── Détail journée ────────────────────────────────────────────────────────────
 
 function openDayDetail(iso) {
   const rdvs = DB.getRdvs()
@@ -240,37 +300,29 @@ function openDayDetail(iso) {
     <div class="modal-title">${label.toUpperCase()}</div>
     ${
       rdvs.length === 0
-        ? `
-      <div class="empty-state">
-        <div class="empty-icon">◷</div>
-        <div class="empty-text">AUCUN RDV CE JOUR</div>
-      </div>
-      <div style="text-align:center;margin-top:16px">
-        <button class="btn btn-primary" onclick="closeModal();openAddRdv()">+ AJOUTER UN RDV</button>
-      </div>
-    `
+        ? `<div class="empty-state"><div class="empty-icon">◷</div><div class="empty-text">AUCUN RDV CE JOUR</div></div>
+         <div style="text-align:center;margin-top:16px"><button class="btn btn-primary" onclick="closeModal();openAddRdv()">+ AJOUTER UN RDV</button></div>`
         : rdvs
             .map(
               (r) => `
-      <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
-            <div style="font-weight:500;font-size:14px;margin-bottom:4px">${r.titre}</div>
-            <div style="font-size:12px;color:var(--ink-muted)">${clientName(r.clientId)}</div>
-            <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:4px">${r.heure} · ${r.duree}min</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-            ${statutBadge(r.statut)}
-            <div style="display:flex;gap:6px">
-              <button class="btn btn-ghost btn-sm" onclick="closeModal();openContratFromRdv(${r.id})">◪ CONTRAT</button>
-              <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
+        <div style="padding:14px;background:var(--bg-base);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-weight:500;font-size:14px;margin-bottom:4px">${escapeHTML(r.titre)}</div>
+              <div style="font-size:12px;color:var(--ink-muted)">${escapeHTML(clientName(r.clientId))}</div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:4px">${r.heure} · ${r.duree}min</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+              ${statutBadge(r.statut)}
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" onclick="closeModal();openContratFromRdv(${r.id})">◪ CONTRAT</button>
+                <button class="btn btn-ghost btn-sm" onclick="closeModal();openEditRdv(${r.id})">EDIT</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteRdv(${r.id},'${iso}')">✕</button>
+              </div>
             </div>
           </div>
-        </div>
-        ${r.notes ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-muted);font-style:italic">${r.notes}</div>` : ""}
-      </div>
-    `,
+          ${r.notes ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-muted);font-style:italic">${escapeHTML(r.notes)}</div>` : ""}
+        </div>`,
             )
             .join("")
     }
@@ -294,6 +346,8 @@ function openRdvDetail(id) {
   openDayDetail(r.date);
 }
 
+// ── Édition RDV ───────────────────────────────────────────────────────────────
+
 function openEditRdv(id) {
   const r = DB.getRdvs().find((x) => x.id === id);
   if (!r) return;
@@ -303,28 +357,19 @@ function openEditRdv(id) {
     <div class="form-group">
       <label class="form-label">Client</label>
       <select class="form-select" id="erdv-client">
-        ${clients.map((c) => `<option value="${c.id}" ${c.id === r.clientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
+        ${clients.map((c) => `<option value="${c.id}" ${c.id === r.clientId ? "selected" : ""}>${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</option>`).join("")}
       </select>
     </div>
     <div class="form-group">
       <label class="form-label">Titre</label>
-      <input class="form-input" id="erdv-titre" value="${r.titre}">
+      <input class="form-input" id="erdv-titre" value="${escapeHTML(r.titre)}">
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input class="form-input" id="erdv-date" type="date" value="${r.date}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Heure</label>
-        <input class="form-input" id="erdv-heure" type="time" value="${r.heure}">
-      </div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="erdv-date" type="date" value="${r.date}"></div>
+      <div class="form-group"><label class="form-label">Heure</label><input class="form-input" id="erdv-heure" type="time" value="${r.heure}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Durée (min)</label>
-        <input class="form-input" id="erdv-duree" type="number" value="${r.duree}" step="15">
-      </div>
+      <div class="form-group"><label class="form-label">Durée (min)</label><input class="form-input" id="erdv-duree" type="number" value="${r.duree}" step="15"></div>
       <div class="form-group">
         <label class="form-label">Statut</label>
         <select class="form-select" id="erdv-statut">
@@ -337,7 +382,7 @@ function openEditRdv(id) {
     </div>
     <div class="form-group">
       <label class="form-label">Notes</label>
-      <textarea class="form-textarea" id="erdv-notes">${r.notes || ""}</textarea>
+      <textarea class="form-textarea" id="erdv-notes">${escapeHTML(r.notes || "")}</textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal()">ANNULER</button>
@@ -349,13 +394,16 @@ function openEditRdv(id) {
 async function saveEditRdv(id) {
   const ancienStatut = DB.getRdvs().find((r) => r.id === id)?.statut;
   const nouveauStatut = document.getElementById("erdv-statut").value;
+  const date = document.getElementById("erdv-date").value;
+  const heure = document.getElementById("erdv-heure").value;
+  const duree = parseInt(document.getElementById("erdv-duree").value);
 
   await DB.updateRdv(id, {
     clientId: parseInt(document.getElementById("erdv-client").value),
     titre: document.getElementById("erdv-titre").value.trim(),
-    date: document.getElementById("erdv-date").value,
-    heure: document.getElementById("erdv-heure").value,
-    duree: parseInt(document.getElementById("erdv-duree").value),
+    date,
+    heure,
+    duree,
     statut: nouveauStatut,
     notes: document.getElementById("erdv-notes").value.trim(),
   });
@@ -363,17 +411,19 @@ async function saveEditRdv(id) {
   closeModal();
   renderAgenda();
 
-  // 🎯 Déclenchement automatique de la saisie finances si passage en "terminé"
+  if (nouveauStatut !== "annule") {
+    const conflits = _detecterConflits(date, heure, duree, id);
+    _warnConflits(conflits);
+  }
+
   if (ancienStatut !== "termine" && nouveauStatut === "termine") {
-    // Vérifier qu'il n'y a pas déjà une entrée finance liée à ce RDV
     const dejaEnregistre = DB.getFinances().some((f) => f.rdvId === id);
-    if (!dejaEnregistre) {
-      setTimeout(() => openFinanceFromRdv(id), 200);
-    }
+    if (!dejaEnregistre) setTimeout(() => openFinanceFromRdv(id), 200);
   }
 }
 
-// Ouvre le formulaire contrat pré-rempli depuis un RDV
+// ── Contrat depuis RDV ────────────────────────────────────────────────────────
+
 function openContratFromRdv(rdvId) {
   const r = DB.getRdvs().find((x) => x.id === rdvId);
   if (!r) return;

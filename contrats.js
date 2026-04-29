@@ -1,9 +1,60 @@
-// === CONTRATS DE CONSENTEMENT — v1.2 ===
+// === CONTRATS DE CONSENTEMENT — v1.3 ===
+
+let contratsSort = { col: "date", dir: "desc" };
+
+function setContratsSort(col) {
+  if (contratsSort.col === col) {
+    contratsSort.dir = contratsSort.dir === "asc" ? "desc" : "asc";
+  } else {
+    contratsSort.col = col;
+    contratsSort.dir = col === "date" ? "desc" : "asc";
+  }
+  renderContrats();
+}
+
+function _sortContrats(arr) {
+  const { col, dir } = contratsSort;
+  const mult = dir === "asc" ? 1 : -1;
+  return [...arr].sort((a, b) => {
+    let va, vb;
+    switch (col) {
+      case "client":
+        va = (a.clientNom || "").toLowerCase();
+        vb = (b.clientNom || "").toLowerCase();
+        break;
+      case "date":
+        va = a.date || "";
+        vb = b.date || "";
+        break;
+      case "prix":
+        va = a.prixTotal || 0;
+        vb = b.prixTotal || 0;
+        break;
+      case "signe":
+        va = a.signe ? 1 : 0;
+        vb = b.signe ? 1 : 0;
+        break;
+      default:
+        va = "";
+        vb = "";
+    }
+    if (va < vb) return -1 * mult;
+    if (va > vb) return 1 * mult;
+    return 0;
+  });
+}
+
+function _thCSort(label, col) {
+  const active = contratsSort.col === col;
+  const arrow = active ? (contratsSort.dir === "asc" ? " ↑" : " ↓") : "";
+  return `<th style="cursor:pointer;user-select:none${active ? ";color:var(--accent)" : ""}"
+    onclick="setContratsSort('${col}')">${label}${arrow}</th>`;
+}
+
+// ── Rendu ─────────────────────────────────────────────────────────────────────
 
 function renderContrats() {
-  const contrats = DB.getContrats().sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
+  const contrats = _sortContrats(DB.getContrats());
 
   document.getElementById("page-contrats").innerHTML = `
     <div class="page-header">
@@ -16,52 +67,52 @@ function renderContrats() {
 
     ${
       contrats.length === 0
-        ? `
-      <div class="empty-state"><div class="empty-icon">◪</div><div class="empty-text">AUCUN CONTRAT GÉNÉRÉ</div></div>
-    `
+        ? `<div class="empty-state"><div class="empty-icon">◪</div><div class="empty-text">AUCUN CONTRAT GÉNÉRÉ</div></div>`
         : `
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>CLIENT</th><th>DESCRIPTION</th><th>ZONE</th><th>DATE</th>
-            <th>PRIX</th><th>SIGNÉ</th><th>ACTIONS</th>
+            ${_thCSort("CLIENT", "client")}
+            <th>DESCRIPTION</th>
+            <th>ZONE</th>
+            ${_thCSort("DATE", "date")}
+            ${_thCSort("PRIX", "prix")}
+            ${_thCSort("SIGNÉ", "signe")}
+            <th>ACTIONS</th>
           </tr>
         </thead>
         <tbody>
           ${contrats
             .map((c) => {
               const solde = ((c.prixTotal || 0) - (c.acompte || 0)).toFixed(2);
+              const initiales = c.clientNom
+                ? c.clientNom
+                    .split(" ")
+                    .map((w) => w[0])
+                    .join("")
+                : "?";
               return `
             <tr>
               <td>
                 <div style="display:flex;align-items:center;gap:8px">
                   <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-glow);border:1px solid var(--accent-dim);
                     display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--accent);font-family:var(--font-mono)">
-                    ${
-                      c.clientNom
-                        ? c.clientNom
-                            .split(" ")
-                            .map((w) => w[0])
-                            .join("")
-                        : "?"
-                    }
+                    ${escapeHTML(initiales)}
                   </div>
-                  ${c.clientNom || "—"}
+                  ${escapeHTML(c.clientNom) || "—"}
                 </div>
               </td>
-              <td>${c.description || "—"}</td>
-              <td><span class="badge badge-blue">${c.zone || "—"}</span></td>
+              <td>${escapeHTML(c.description) || "—"}</td>
+              <td><span class="badge badge-blue">${escapeHTML(c.zone) || "—"}</span></td>
               <td><span class="text-mono">${formatDate(c.date)}</span></td>
               <td>
                 ${
                   c.prixTotal
-                    ? `
-                  <div style="font-family:var(--font-mono);font-size:12px">
-                    <div style="color:var(--ink)">${parseFloat(c.prixTotal).toFixed(2)} €</div>
-                    ${c.acompte ? `<div style="color:var(--ink-muted);font-size:10px">Solde : ${solde} €</div>` : ""}
-                  </div>
-                `
+                    ? `<div style="font-family:var(--font-mono);font-size:12px">
+                      <div style="color:var(--ink)">${parseFloat(c.prixTotal).toFixed(2)} €</div>
+                      ${c.acompte ? `<div style="color:var(--ink-muted);font-size:10px">Solde : ${solde} €</div>` : ""}
+                    </div>`
                     : '<span style="color:var(--ink-muted)">—</span>'
                 }
               </td>
@@ -74,44 +125,33 @@ function renderContrats() {
                   <button class="btn btn-danger btn-sm" onclick="deleteContrat(${c.id})">✕</button>
                 </div>
               </td>
-            </tr>
-          `;
+            </tr>`;
             })
             .join("")}
         </tbody>
       </table>
-    </div>
-    `
+    </div>`
     }
   `;
 }
 
-// ── Helpers lots ─────────────────────────────────────────────────────────────
+// ── Helpers lots ──────────────────────────────────────────────────────────────
 
-// Retourne les stocks d'une catégorie avec au moins 1 unité disponible
 function _stocksDispos(categorie) {
   return DB.getStocks().filter(
     (s) => s.categorie === categorie && s.quantite > 0,
   );
 }
 
-// Construit une ligne "produit + lot" pour le formulaire.
-// prefix   : "aig" | "enc"
-// index    : identifiant unique de la ligne (0, Date.now(), …)
-// stockId  : id du stock pré-sélectionné (ou "manuel"), null si vide
-// lotValue : valeur pré-remplie du champ numLot
 function _buildLotRow(prefix, index, stockId, lotValue) {
-  // Résout la catégorie de stock selon le préfixe
   const categorie = prefix === "aig" ? "Aiguilles" : "Encres";
   const stocks = _stocksDispos(categorie);
-
-  const selectOptions = stocks
+  const selectOpts = stocks
     .map(
       (s) =>
-        `<option value="${s.id}" ${s.id == stockId ? "selected" : ""}>${s.nom}</option>`,
+        `<option value="${s.id}" ${s.id == stockId ? "selected" : ""}>${escapeHTML(s.nom)}</option>`,
     )
     .join("");
-
   const isManuel = stockId === "manuel";
 
   return `
@@ -120,7 +160,7 @@ function _buildLotRow(prefix, index, stockId, lotValue) {
         <label class="form-label">${index === 0 ? (prefix === "aig" ? "Aiguille" : "Encre") : ""}</label>
         <select class="form-select" id="${prefix}-stock-${index}" onchange="_onLotStockChange('${prefix}',${index})">
           <option value="">— Sélectionner dans le stock —</option>
-          ${selectOptions}
+          ${selectOpts}
           <option value="manuel" ${isManuel ? "selected" : ""}>✎ Saisie manuelle</option>
         </select>
       </div>
@@ -128,7 +168,7 @@ function _buildLotRow(prefix, index, stockId, lotValue) {
         <label class="form-label">${index === 0 ? "N° de lot" : ""}</label>
         <input class="form-input" id="${prefix}-lot-${index}"
           placeholder="Lot / Ref..."
-          value="${lotValue || ""}"
+          value="${escapeHTML(lotValue || "")}"
           style="font-family:var(--font-mono);font-size:12px">
       </div>
       <button class="btn btn-danger btn-sm" style="flex-shrink:0;margin-bottom:0"
@@ -141,10 +181,8 @@ function _onLotStockChange(prefix, index) {
   const sel = document.getElementById(`${prefix}-stock-${index}`);
   const lotInput = document.getElementById(`${prefix}-lot-${index}`);
   if (!sel || !lotInput) return;
-
   if (sel.value && sel.value !== "manuel") {
     const stock = DB.getStocks().find((s) => s.id == sel.value);
-    // Clé canonique : numLot
     lotInput.value = stock?.numLot || "";
     lotInput.placeholder = stock?.numLot ? "" : "Lot non renseigné — saisir";
   } else {
@@ -168,7 +206,6 @@ function _addLotRow(prefix) {
   container.appendChild(div.firstElementChild);
 }
 
-// Collecte toutes les lignes lot d'un prefix
 function _collectLots(prefix) {
   const container = document.getElementById(`${prefix}-rows`);
   if (!container) return [];
@@ -180,7 +217,7 @@ function _collectLots(prefix) {
     const lot = document.getElementById(`${prefix}-lot-${idAttr}`);
     if (!sel) return;
     const stockId = sel.value;
-    if (!stockId) return; // ligne vide ignorée
+    if (!stockId) return;
     const stock =
       stockId !== "manuel" ? DB.getStocks().find((s) => s.id == stockId) : null;
     result.push({
@@ -192,7 +229,7 @@ function _collectLots(prefix) {
   return result;
 }
 
-// ── Formulaire contrat — HTML partagé création / édition ─────────────────────
+// ── Formulaire partagé création / édition ─────────────────────────────────────
 
 const ZONES_CORPORELLES = [
   "Bras droit",
@@ -220,14 +257,12 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
   const today = new Date().toISOString().split("T")[0];
   const d = data || {};
 
-  // Reconstruit les lignes lots existantes (édition) ou une ligne vide (création)
   const aigRows =
     d.lotsAiguilles && d.lotsAiguilles.length > 0
       ? d.lotsAiguilles
           .map((l, i) => _buildLotRow("aig", i, l.stockId, l.numLot))
           .join("")
       : _buildLotRow("aig", 0, null, "");
-
   const encRows =
     d.lotsEncres && d.lotsEncres.length > 0
       ? d.lotsEncres
@@ -243,7 +278,7 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
         <label class="form-label">Client</label>
         <select class="form-select" id="ct-client" onchange="fillContratClient()">
           <option value="">Sélectionner...</option>
-          ${clients.map((c) => `<option value="${c.id}" ${c.id === d.clientId ? "selected" : ""}>${c.prenom} ${c.nom}</option>`).join("")}
+          ${clients.map((c) => `<option value="${c.id}" ${c.id === d.clientId ? "selected" : ""}>${escapeHTML(c.prenom)} ${escapeHTML(c.nom)}</option>`).join("")}
         </select>
       </div>
       <div class="form-group">
@@ -254,7 +289,7 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
 
     <div class="form-group">
       <label class="form-label">Description du tatouage</label>
-      <input class="form-input" id="ct-desc" placeholder="Dragon avant-bras droit, mandala épaule..." value="${d.description || ""}">
+      <input class="form-input" id="ct-desc" placeholder="Dragon avant-bras droit, mandala épaule..." value="${escapeHTML(d.description || "")}">
     </div>
 
     <div class="form-row">
@@ -273,23 +308,19 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
       </div>
     </div>
 
-    <!-- PRODUITS UTILISÉS -->
     <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
       <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--accent);margin-bottom:14px">
         PRODUITS UTILISÉS & N° DE LOT
         <span style="color:var(--ink-muted);font-size:9px;margin-left:8px;letter-spacing:1px">(traçabilité réglementaire)</span>
       </div>
-
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">AIGUILLES</div>
       <div id="aig-rows">${aigRows}</div>
       <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="_addLotRow('aig')">+ Ajouter une aiguille</button>
-
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--ink-muted);letter-spacing:1px;margin-bottom:6px">ENCRES</div>
       <div id="enc-rows">${encRows}</div>
       <button class="btn btn-ghost btn-sm" onclick="_addLotRow('enc')">+ Ajouter une encre</button>
     </div>
 
-    <!-- CONDITIONS FINANCIÈRES -->
     <div style="background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px">
       <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--accent);margin-bottom:12px">CONDITIONS FINANCIÈRES</div>
       <div class="form-row">
@@ -308,12 +339,12 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
     </div>
 
     <div class="form-group">
-      <label class="form-label">Allergies (pré-remplies depuis la fiche client)</label>
-      <input class="form-input" id="ct-allergies" placeholder="Aucune connue" value="${d.allergies || ""}">
+      <label class="form-label">Allergies</label>
+      <input class="form-input" id="ct-allergies" placeholder="Aucune connue" value="${escapeHTML(d.allergies || "")}">
     </div>
     <div class="form-group">
       <label class="form-label">Notes médicales</label>
-      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements...">${d.medical || ""}</textarea>
+      <textarea class="form-textarea" id="ct-medical" placeholder="Problèmes de coagulation, diabète, traitements...">${escapeHTML(d.medical || "")}</textarea>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
@@ -323,8 +354,6 @@ function _buildContratForm({ title, data, onSave, onPreview }) {
     </div>
   `;
 }
-
-// ── Formulaire nouveau contrat ────────────────────────────────────────────────
 
 function openNewContrat() {
   openModal(
@@ -344,8 +373,7 @@ function updateSoldePreview() {
   if (!el) return;
   if (total > 0) {
     const solde = total - acompte;
-    const color = solde <= 0 ? "var(--green)" : "var(--accent)";
-    el.innerHTML = `Solde à régler le jour J : <span style="color:${color};font-weight:700">${solde.toFixed(2)} €</span>`;
+    el.innerHTML = `Solde à régler le jour J : <span style="color:${solde <= 0 ? "var(--green)" : "var(--accent)"};font-weight:700">${solde.toFixed(2)} €</span>`;
   } else {
     el.innerHTML = "";
   }
@@ -363,7 +391,6 @@ function getContratData() {
   const c = DB.getClient(clientId);
   const prixTotal = parseFloat(document.getElementById("ct-prix")?.value) || 0;
   const acompte = parseFloat(document.getElementById("ct-acompte")?.value) || 0;
-
   return {
     clientId,
     clientNom: c ? `${c.prenom} ${c.nom}` : "",
@@ -395,12 +422,9 @@ async function saveNewContrat() {
   toast("Contrat généré ✓", "success");
 }
 
-// ── Édition d'un contrat existant ────────────────────────────────────────────
-
 function openEditContrat(id) {
   const ct = DB.getContrats().find((c) => c.id === id);
   if (!ct) return;
-
   openModal(
     _buildContratForm({
       title: "MODIFIER CONTRAT",
@@ -409,8 +433,6 @@ function openEditContrat(id) {
       onPreview: `previewEditContrat(${id})`,
     }),
   );
-
-  // Déclenche le preview du solde si prix déjà renseigné
   updateSoldePreview();
 }
 
@@ -432,7 +454,6 @@ function previewEditContrat(id) {
     alert("Remplissez au moins la description.");
     return;
   }
-  // Fusionne avec l'id/createdAt existants pour que le PDF soit cohérent
   const ct = DB.getContrats().find((c) => c.id === id);
   const merged = { ...ct, ...liveData };
   window._pendingContratData = merged;
@@ -446,7 +467,7 @@ function previewEditContrat(id) {
   `);
 }
 
-// ── Génération HTML du contrat ────────────────────────────────────────────────
+// ── Génération HTML contrat ───────────────────────────────────────────────────
 
 function _getStudioSettings() {
   if (typeof _cache !== "undefined" && _cache.settings) return _cache.settings;
@@ -480,26 +501,16 @@ function generateContratHTML(contrat) {
   const acompte = parseFloat(contrat.acompte) || 0;
   const solde = prixTotal - acompte;
 
-  const aiguilles = contrat.lotsAiguilles || [];
-  const encres = contrat.lotsEncres || [];
-
   function buildLotsTable(items, label) {
-    if (!items || items.length === 0) {
-      return `<tr>
-        <td style="padding:6px 10px;border:1px solid #ddd;color:#888;font-style:italic">${label} utilisé(e)</td>
-        <td style="padding:6px 10px;border:1px solid #ddd;border-bottom:1px solid #aaa;min-width:160px">&nbsp;</td>
-      </tr>`;
-    }
+    if (!items || items.length === 0)
+      return `<tr><td style="padding:6px 10px;border:1px solid #ddd;color:#888;font-style:italic">${label} utilisé(e)</td><td style="padding:6px 10px;border:1px solid #ddd;min-width:160px">&nbsp;</td></tr>`;
     return items
       .map(
         (item) => `
       <tr>
         <td style="padding:6px 10px;border:1px solid #ddd">${item.nomProduit || "—"}</td>
-        <td style="padding:6px 10px;border:1px solid #ddd;font-family:monospace;font-size:12px">
-          ${item.numLot || '<span style="color:#aaa;font-style:italic">—</span>'}
-        </td>
-      </tr>
-    `,
+        <td style="padding:6px 10px;border:1px solid #ddd;font-family:monospace;font-size:12px">${item.numLot || '<span style="color:#aaa;font-style:italic">—</span>'}</td>
+      </tr>`,
       )
       .join("");
   }
@@ -533,52 +544,39 @@ function generateContratHTML(contrat) {
 
       <h3>3. PRODUITS UTILISÉS</h3>
       <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:12px">
-        <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px;width:60%">Produit</th>
-            <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px">N° de lot</th>
-          </tr>
-        </thead>
+        <thead><tr style="background:#f5f5f5">
+          <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px;width:60%">Produit</th>
+          <th style="padding:7px 10px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;letter-spacing:1px">N° de lot</th>
+        </tr></thead>
         <tbody>
-          <tr style="background:#fafafa">
-            <td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555">Aiguilles</td>
-          </tr>
-          ${buildLotsTable(aiguilles, "Aiguille")}
-          <tr style="background:#fafafa">
-            <td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#555">Encres</td>
-          </tr>
-          ${buildLotsTable(encres, "Encre")}
+          <tr style="background:#fafafa"><td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;text-transform:uppercase;color:#555">Aiguilles</td></tr>
+          ${buildLotsTable(contrat.lotsAiguilles || [], "Aiguille")}
+          <tr style="background:#fafafa"><td colspan="2" style="padding:5px 10px;border:1px solid #ddd;font-size:10px;font-weight:700;text-transform:uppercase;color:#555">Encres</td></tr>
+          ${buildLotsTable(contrat.lotsEncres || [], "Encre")}
         </tbody>
       </table>
-      <p style="font-size:11px;color:#777;margin-top:4px">
-        Ces informations sont enregistrées à des fins de traçabilité conformément à la réglementation en vigueur.
-      </p>
+      <p style="font-size:11px;color:#777;margin-top:4px">Ces informations sont enregistrées à des fins de traçabilité conformément à la réglementation en vigueur.</p>
 
       <h3>4. DÉCLARATIONS MÉDICALES</h3>
-      <p>Je déclare ne pas être dans l'une des situations suivantes susceptibles de contre-indiquer la réalisation d'un tatouage :</p>
+      <p>Je déclare ne pas être dans l'une des situations suivantes :</p>
       <ul style="margin:8px 0 8px 20px;line-height:2">
-        <li>Grossesse ou allaitement</li>
-        <li>Maladie auto-immune ou immunodépression</li>
-        <li>Troubles de la coagulation sanguine</li>
-        <li>Diabète non contrôlé</li>
-        <li>Infection cutanée active sur la zone</li>
-        <li>Traitement anticoagulant en cours</li>
+        <li>Grossesse ou allaitement</li><li>Maladie auto-immune ou immunodépression</li>
+        <li>Troubles de la coagulation sanguine</li><li>Diabète non contrôlé</li>
+        <li>Infection cutanée active sur la zone</li><li>Traitement anticoagulant en cours</li>
         <li>Allergie aux colorants ou produits d'hygiène</li>
       </ul>
       <p><strong>Allergies connues :</strong> ${contrat.allergies || "Aucune connue"}</p>
       ${contrat.medical ? `<p><strong>Informations médicales complémentaires :</strong> ${contrat.medical}</p>` : ""}
 
       <h3>5. CONSENTEMENT ÉCLAIRÉ</h3>
-      <p>Je reconnais avoir été informé(e) des éléments suivants :</p>
       <ul style="margin:8px 0 8px 20px;line-height:1.8">
         <li>Le tatouage est un acte permanent et irréversible</li>
         <li>Des rougeurs, gonflements et démangeaisons temporaires sont normaux durant la cicatrisation</li>
-        <li>Le résultat final dépend notamment de la qualité de ma cicatrisation et du respect des soins post-séance</li>
+        <li>Le résultat final dépend de la qualité de ma cicatrisation et du respect des soins post-séance</li>
         <li>En cas d'antécédents médicaux, une consultation médicale préalable est recommandée</li>
         <li>Le tatoueur se réserve le droit de refuser la prestation s'il l'estime contre-indiquée</li>
       </ul>
       <p>Je confirme être majeur(e), en bonne santé, et ne pas être sous l'influence d'alcool ou de substances.</p>
-      <p>J'ai lu et compris les informations ci-dessus. Je consens librement à la réalisation de ce tatouage.</p>
 
       <h3>6. SOINS POST-TATOUAGE</h3>
       <ul style="margin:8px 0 8px 20px;line-height:1.8">
@@ -597,37 +595,23 @@ function generateContratHTML(contrat) {
           ? `
       <h3>8. CONDITIONS FINANCIÈRES</h3>
       <table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:13px">
-        <thead>
-          <tr style="background:#f5f5f5">
-            <th style="padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;letter-spacing:1px;text-transform:uppercase">Désignation</th>
-            <th style="padding:8px 12px;text-align:right;border:1px solid #ddd;font-size:11px;letter-spacing:1px;text-transform:uppercase">Montant</th>
-          </tr>
-        </thead>
+        <thead><tr style="background:#f5f5f5">
+          <th style="padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase">Désignation</th>
+          <th style="padding:8px 12px;text-align:right;border:1px solid #ddd;font-size:11px;text-transform:uppercase">Montant</th>
+        </tr></thead>
         <tbody>
-          <tr>
-            <td style="padding:8px 12px;border:1px solid #ddd">Prix total de la prestation</td>
-            <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;font-weight:600">${prixTotal.toFixed(2)} €</td>
-          </tr>
+          <tr><td style="padding:8px 12px;border:1px solid #ddd">Prix total de la prestation</td><td style="padding:8px 12px;border:1px solid #ddd;text-align:right;font-weight:600">${prixTotal.toFixed(2)} €</td></tr>
           ${
             acompte > 0
               ? `
-          <tr>
-            <td style="padding:8px 12px;border:1px solid #ddd;color:#555">Acompte déjà versé</td>
-            <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;color:#555">− ${acompte.toFixed(2)} €</td>
-          </tr>
-          <tr style="background:#fffbe6">
-            <td style="padding:10px 12px;border:1px solid #ddd;font-weight:700">Solde à régler le jour de la séance</td>
-            <td style="padding:10px 12px;border:1px solid #ddd;text-align:right;font-weight:700;font-size:15px">${solde.toFixed(2)} €</td>
-          </tr>
+          <tr><td style="padding:8px 12px;border:1px solid #ddd;color:#555">Acompte déjà versé</td><td style="padding:8px 12px;border:1px solid #ddd;text-align:right;color:#555">− ${acompte.toFixed(2)} €</td></tr>
+          <tr style="background:#fffbe6"><td style="padding:10px 12px;border:1px solid #ddd;font-weight:700">Solde à régler le jour de la séance</td><td style="padding:10px 12px;border:1px solid #ddd;text-align:right;font-weight:700;font-size:15px">${solde.toFixed(2)} €</td></tr>
           `
               : ""
           }
         </tbody>
       </table>
-      <p style="font-size:11px;color:#777;margin-top:6px">
-        Le paiement du solde est dû le jour de la séance, avant le début de la prestation.
-        En cas d'annulation moins de 48h avant la séance, l'acompte reste acquis au studio.
-      </p>
+      <p style="font-size:11px;color:#777;margin-top:6px">Le paiement du solde est dû le jour de la séance. En cas d'annulation moins de 48h, l'acompte reste acquis au studio.</p>
       `
           : ""
       }
@@ -657,7 +641,7 @@ function previewContrat(id) {
   const ct = DB.getContrats().find((c) => c.id === id);
   if (!ct) return;
   openModal(`
-    <div class="modal-title">CONTRAT — ${ct.clientNom}</div>
+    <div class="modal-title">CONTRAT — ${escapeHTML(ct.clientNom)}</div>
     ${generateContratHTML(ct)}
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-ghost" onclick="closeModal()">FERMER</button>
@@ -691,7 +675,6 @@ function printContrat(id) {
 
 function printContratData(ct) {
   const html = generateContratHTML(ct);
-
   if (
     typeof window.electronAPI !== "undefined" &&
     typeof window.electronAPI.printToPDF === "function"
@@ -702,14 +685,12 @@ function printContratData(ct) {
       .catch(() => _fallbackPrint(html, ct));
     return;
   }
-
   _fallbackPrint(html, ct);
 }
 
 function _buildPrintHTML(html, ct) {
   return `<!DOCTYPE html><html lang="fr"><head>
-    <meta charset="UTF-8">
-    <title>Contrat — ${ct.clientNom || "Client"}</title>
+    <meta charset="UTF-8"><title>Contrat — ${ct.clientNom || "Client"}</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
     ${_getPrintCSS()}
   </head><body>${html}</body></html>`;
@@ -722,8 +703,7 @@ function _fallbackPrint(html, ct) {
     return;
   }
   win.document.write(`<!DOCTYPE html><html lang="fr"><head>
-    <meta charset="UTF-8">
-    <title>Contrat — ${ct.clientNom || "Client"}</title>
+    <meta charset="UTF-8"><title>Contrat — ${ct.clientNom || "Client"}</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
     ${_getPrintCSS()}
   </head><body>
@@ -745,16 +725,14 @@ function _getPrintCSS() {
     .studio-header { text-align:center; border-bottom:2px solid #111; padding-bottom:16px; margin-bottom:20px; }
     h2 { font-size:18px; font-weight:700; }
     h3 { font-size:11px; font-weight:700; margin:16px 0 6px; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid #ddd; padding-bottom:4px; color:#333; }
-    p  { line-height:1.7; margin-bottom:5px; }
-    li { line-height:1.8; }
-    ul { margin:6px 0 6px 20px; }
+    p  { line-height:1.7; margin-bottom:5px; } li { line-height:1.8; } ul { margin:6px 0 6px 20px; }
     table { border-collapse:collapse; }
     .field-line { border-bottom:1px solid #999; display:inline-block; min-width:200px; }
     .print-actions { text-align:center; padding:24px; border-top:1px solid #eee; margin-top:16px; }
-    .print-btn { padding:12px 32px; font-size:14px; font-family:'DM Sans',sans-serif; cursor:pointer; background:#111; color:#fff; border:none; border-radius:6px; }
+    .print-btn { padding:12px 32px; font-size:14px; cursor:pointer; background:#111; color:#fff; border:none; border-radius:6px; }
     .print-hint { margin-top:10px; font-size:12px; color:#777; }
     @page { margin:12mm 14mm; size:A4; }
-    @media print { .print-actions { display:none; } body { padding:0; } .contrat-preview { padding:0; } }
+    @media print { .print-actions { display:none; } .contrat-preview { padding:0; } }
   </style>`;
 }
 
@@ -766,7 +744,6 @@ async function deleteContrat(id) {
   }
 }
 
-// ── Pré-remplissage depuis un RDV (appelé depuis agenda.js) ──────────────────
 function openNewContratFromRdv(rdv) {
   const c = DB.getClient(rdv.clientId);
   openModal(
