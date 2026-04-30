@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Activation Plan'Ink</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        --bg-base: #0a0a0b;
+        --bg-card: #131316;
+        --ink: #e8e4d8;
+        --ink-muted: #888781;
+        --ink-faint: #5f5e5a;
+        --accent: #c8a96e;
+        --accent-dim: rgba(200, 169, 110, 0.35);
+        --accent-glow: rgba(200, 169, 110, 0.08);
+        --border: rgba(232, 228, 216, 0.08);
+        --green: #97c459;
+        --red: #e24b4a;
+        --radius: 6px;
+        --font-display: "Bebas Neue", sans-serif;
+        --font-sans: "DM Sans", sans-serif;
+        --font-mono: "Space Mono", monospace;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg-base);
+        color: var(--ink);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        overflow: hidden;
+      }
+      .logo {
+        font-family: var(--font-display);
+        font-size: 38px;
+        letter-spacing: 4px;
+        color: var(--accent);
+        margin-bottom: 8px;
+      }
+      .tagline {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 3px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        margin-bottom: 36px;
+      }
+      .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px 32px;
+        width: 100%;
+        max-width: 460px;
+      }
+      h1 {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        color: var(--accent);
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      p.intro {
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--ink-muted);
+        margin-bottom: 22px;
+      }
+      label {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      input {
+        width: 100%;
+        background: var(--bg-base);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        padding: 12px 14px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      input:focus {
+        border-color: var(--accent-dim);
+        background: var(--accent-glow);
+      }
+      input::placeholder {
+        color: var(--ink-faint);
+        letter-spacing: 0.5px;
+      }
+      .hint {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--ink-faint);
+        font-family: var(--font-mono);
+      }
+      .actions {
+        margin-top: 22px;
+        display: flex;
+        gap: 10px;
+      }
+      button {
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        border-radius: var(--radius);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition:
+          opacity 0.15s,
+          background 0.15s;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #0a0a0b;
+        font-weight: 700;
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: #d4b97a;
+      }
+      .message {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: var(--radius);
+        font-size: 12px;
+        line-height: 1.5;
+        display: none;
+      }
+      .message.error {
+        display: block;
+        background: rgba(226, 75, 74, 0.1);
+        border: 1px solid rgba(226, 75, 74, 0.35);
+        color: var(--red);
+      }
+      .message.success {
+        display: block;
+        background: rgba(151, 196, 89, 0.1);
+        border: 1px solid rgba(151, 196, 89, 0.35);
+        color: var(--green);
+      }
+      .footer {
+        margin-top: 28px;
+        font-size: 11px;
+        color: var(--ink-faint);
+        text-align: center;
+      }
+      .footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .footer a:hover {
+        text-decoration: underline;
+      }
+      .spinner {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 1.5px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo">PLAN'INK</div>
+    <div class="tagline">Tattoo Studio Manager</div>
+
+    <div class="card">
+      <h1>Activation</h1>
+      <p class="intro">
+        Pour commencer, entrez la clé de licence reçue par email après votre
+        achat.
+      </p>
+
+      <label for="license-key">Clé de licence</label>
+      <input
+        type="text"
+        id="license-key"
+        placeholder="XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="40"
+      />
+      <div class="hint">
+        Collez votre clé telle qu'elle apparaît dans votre email.
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="btn-activate">Activer</button>
+      </div>
+
+      <div class="message" id="msg"></div>
+    </div>
+
+    <div class="footer">
+      Pas encore de licence ? <a href="#" id="buy-link">Acheter Plan'Ink</a>
+    </div>
+
+    <script>
+      const inputKey = document.getElementById("license-key");
+      const btn = document.getElementById("btn-activate");
+      const msg = document.getElementById("msg");
+
+      // Pas de reformatage agressif — la clé est passée telle quelle.
+      // On nettoie juste les espaces et on met en majuscules à la frappe.
+      inputKey.addEventListener("input", (e) => {
+        const cursor = e.target.selectionStart;
+        e.target.value = e.target.value.toUpperCase().replace(/\s/g, "");
+        e.target.setSelectionRange(cursor, cursor);
+      });
+
+      inputKey.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") activate();
+      });
+
+      btn.addEventListener("click", activate);
+
+      document.getElementById("buy-link").addEventListener("click", (e) => {
+        e.preventDefault();
+        // À configurer plus tard avec ton URL de checkout LS
+      });
+
+      async function activate() {
+        const key = inputKey.value.trim();
+        if (!key) {
+          showError("Veuillez entrer votre clé de licence.");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Vérification...';
+        msg.className = "message";
+        msg.textContent = "";
+
+        try {
+          const result = await window.electronAPI.licenseActivate(key);
+
+          if (result.valid) {
+            showSuccess("Licence activée. Lancement de l'application...");
+          } else {
+            showError(_humanReason(result.reason));
+            btn.disabled = false;
+            btn.textContent = "Activer";
+          }
+        } catch (err) {
+          showError("Erreur de connexion. Vérifiez votre connexion internet.");
+          btn.disabled = false;
+          btn.textContent = "Activer";
+        }
+      }
+
+      function showError(text) {
+        msg.className = "message error";
+        msg.textContent = text;
+      }
+
+      function showSuccess(text) {
+        msg.className = "message success";
+        msg.textContent = text;
+      }
+
+      function _humanReason(reason) {
+        const map = {
+          empty_key: "Clé de licence vide.",
+          not_found: "Cette clé de licence n'existe pas.",
+          expired:
+            "Cette licence a expiré. Renouvelez votre abonnement pour continuer.",
+          cancelled: "Cette licence a été annulée.",
+          max_activations_reached:
+            "Cette clé est déjà utilisée sur le nombre maximum d'appareils autorisés.",
+          network_error:
+            "Connexion au serveur impossible. Vérifiez votre connexion.",
+          server_error: "Erreur serveur. Réessayez dans quelques instants.",
+          invalid_json: "Réponse invalide du serveur.",
+        };
+        return map[reason] || `Activation impossible (${reason || "inconnu"}).`;
+      }
+    </script>
+  </body>
+</html>

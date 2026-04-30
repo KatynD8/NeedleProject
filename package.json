@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win nsis",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "cross-env PLANINK_DEV=1 electron ."
   },
   "repository": {
     "type": "git",
@@ -21,19 +22,19 @@
   },
   "homepage": "https://github.com/KatynD8/NeedleProject#readme",
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^41.1.1",
     "electron-builder": "^25.0.0"
   },
   "build": {
     "appId": "com.katyn.planink",
     "productName": "Plan'ink",
-     "icon": "build/icon.ico",
+    "icon": "build/icon.ico",
     "directories": {
       "output": "dist"
     },
-   
     "win": {
-       "icon": "build/icon.ico",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -51,5 +52,8 @@
       "artifactName": "Planink-Setup-${version}.exe",
       "installerIcon": "./assets/favicon.ico"
     }
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0"
   }
 }

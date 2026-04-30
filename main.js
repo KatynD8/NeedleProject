@@ -1,3 +1,4 @@
+// main.js — Process principal Electron — v1.3
 const {
   app,
   BrowserWindow,
@@ -8,7 +9,17 @@ const {
 const path = require("path");
 const fs = require("fs");
 
-// Données dans AppData/Roaming/<appName>/data
+const license = require("./license");
+
+// ── Détection du mode dev ─────────────────────────────────────────────────
+// Bypass de la vérification de licence quand :
+//   • PLANINK_DEV=1 dans l'environnement (npm run dev)
+//   • app.isPackaged === false (lancement depuis le code source via electron .)
+// const IS_DEV = process.env.PLANINK_DEV === "1" || !app.isPackaged;
+
+const IS_DEV = process.env.PLANINK_DEV === "1" || !app.isPackaged;
+
+// ── Données dans AppData/Roaming/<appName>/data ──────────────────────────
 const DATA_DIR = path.join(app.getPath("userData"), "data");
 const DATA_PATH = path.join(DATA_DIR, "inkmaster-data.json");
 const DATA_TMP = DATA_PATH + ".tmp";
@@ -17,7 +28,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// ── Backup rotatif — 3 derniers .bak ─────────────────────────────────────────
+// ── Backup rotatif — 3 derniers .bak ─────────────────────────────────────
 function rotateBackup() {
   if (!fs.existsSync(DATA_PATH)) return;
   const stamp = new Date().toISOString().slice(0, 10);
@@ -39,8 +50,13 @@ function rotateBackup() {
   }
 }
 
-function createWindow() {
-  const win = new BrowserWindow({
+// ── Fenêtres ──────────────────────────────────────────────────────────────
+
+let mainWindow = null;
+let activateWindow = null;
+
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1100,
@@ -53,10 +69,64 @@ function createWindow() {
     },
     backgroundColor: "#080809",
   });
-  win.loadFile("index.html");
+  mainWindow.loadFile("index.html");
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
-// ── IPC handlers ──────────────────────────────────────────────────────────────
+function createActivateWindow() {
+  activateWindow = new BrowserWindow({
+    width: 540,
+    height: 640,
+    minWidth: 540,
+    minHeight: 640,
+    maxWidth: 540,
+    maxHeight: 640,
+    resizable: false,
+    title: "Activation Plan'Ink",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    backgroundColor: "#080809",
+  });
+  activateWindow.loadFile("activate.html");
+  activateWindow.setMenuBarVisibility(false);
+
+  activateWindow.on("closed", () => {
+    activateWindow = null;
+  });
+}
+
+// ── Logique de démarrage ──────────────────────────────────────────────────
+
+async function bootstrap() {
+  // Mode dev → bypass total
+  if (IS_DEV) {
+    console.log(
+      "[Plan'Ink] Mode développement — vérification licence bypassée",
+    );
+    createMainWindow();
+    return;
+  }
+
+  // Mode production → vérification de licence
+  const result = await license.checkLicenseAtStartup();
+  console.log(
+    `[Plan'Ink] Licence : ${result.valid ? "VALIDE" : "INVALIDE"} (${result.source})`,
+  );
+
+  if (result.valid) {
+    createMainWindow();
+  } else {
+    createActivateWindow();
+  }
+}
+
+// ── IPC handlers ──────────────────────────────────────────────────────────
 
 ipcMain.handle("load-data", () => {
   try {
@@ -68,7 +138,6 @@ ipcMain.handle("load-data", () => {
   }
 });
 
-// Écriture atomique : tmp → rename
 ipcMain.handle("save-data", (_, data) => {
   try {
     rotateBackup();
@@ -86,7 +155,6 @@ ipcMain.handle("save-data", (_, data) => {
 
 ipcMain.handle("get-data-path", () => DATA_PATH);
 
-// Export CSV avec boîte de dialogue
 ipcMain.handle("save-csv", async (_, { content, filename }) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: filename,
@@ -102,19 +170,36 @@ ipcMain.handle("save-csv", async (_, { content, filename }) => {
   }
 });
 
-// Notification desktop native
-// Utilisé pour les rappels RDV J-1 au démarrage.
 ipcMain.handle("show-notification", (_, { title, body }) => {
   if (!Notification.isSupported()) return false;
-  new Notification({
-    title,
-    body,
-    icon: path.join(__dirname, "assets", "icon.png"),
-  }).show();
+  new Notification({ title, body }).show();
   return true;
 });
 
-app.whenReady().then(createWindow);
+// ── Handlers licence ─────────────────────────────────────────────────────
+
+ipcMain.handle("license-activate", async (_, licenseKey) => {
+  const result = await license.activateLicense(licenseKey);
+
+  // Si l'activation réussit, on bascule sur la fenêtre principale
+  if (result.valid) {
+    createMainWindow();
+    if (activateWindow) {
+      activateWindow.close();
+      activateWindow = null;
+    }
+  }
+
+  return result;
+});
+
+ipcMain.handle("license-info", () => {
+  return license.getStoredLicense();
+});
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────
+
+app.whenReady().then(bootstrap);
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
