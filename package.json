@@ -1,19 +1,25 @@
 {
-  "name": "needleproject",
-  "version": "1.0.0",
-  "description": "Plan'ink — Studio Management App",
+  "name": "planink-studio",
+  "version": "1.0.1",
+  "description": "Plan'Ink — Studio Management App",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win nsis",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "cross-env PLANINK_DEV=1 electron ."
+    "dev": "cross-env PLANINK_DEV=1 electron .",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/KatynD8/NeedleProject.git"
   },
-  "keywords": [],
+  "keywords": [
+    "tattoo",
+    "studio",
+    "management",
+    "electron"
+  ],
   "author": "KatynD8",
   "license": "ISC",
   "type": "commonjs",
@@ -26,34 +32,54 @@
     "electron": "^41.1.1",
     "electron-builder": "^25.0.0"
   },
+  "dependencies": {
+    "electron-store": "^8.2.0"
+  },
   "build": {
-    "appId": "com.katyn.planink",
-    "productName": "Plan'ink",
-    "icon": "build/icon.ico",
+    "appId": "fr.planink.studio",
+    "productName": "Plan'Ink",
+    "copyright": "Copyright © 2026 Plan'Ink",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{.env,.env.local,.env.development,.env.test,.env.production}",
+      "!**/{npm-debug.log,yarn.lock,package-lock.json}",
+      "!supabase/**/*",
+      "!.vscode/**/*",
+      "!dist/**/*"
+    ],
     "win": {
-      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
-      ]
+      ],
+      "icon": "build/icon.ico",
+      "publisherName": "Plan'Ink",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "artifactName": "Planink-Setup-${version}.exe",
-      "installerIcon": "./assets/favicon.ico"
+      "shortcutName": "Plan'Ink",
+      "uninstallDisplayName": "Plan'Ink Studio Manager",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "artifactName": "Plan-Ink-Setup-${version}.${ext}"
     }
-  },
-  "dependencies": {
-    "electron-store": "^8.2.0"
   }
 }
